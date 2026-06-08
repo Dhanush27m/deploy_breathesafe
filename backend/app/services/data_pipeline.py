@@ -920,3 +920,227 @@ def run_pipeline(update_csv: bool = False, verbose: bool = True) -> dict:
         "rows_inserted": rows_inserted,
         "csv_rows_added": csv_added,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# V2: All-India live stations for the map
+# ─────────────────────────────────────────────────────────────────────────────
+
+# In-memory cache: {data: [...], fetched_at: float}
+_INDIA_LIVE_CACHE: dict = {}
+_INDIA_LIVE_TTL   = 30 * 60   # 30 minutes
+
+
+# State lookup for our 29 known cities (used to tag city-level results)
+_CITY_STATE = {c[0]: c[1] for c in CITIES}
+
+
+def _india_aqi_from_pm25(pm25: float) -> float | None:
+    """Calculate India AQI from PM2.5 value (µg/m³)."""
+    if pm25 is None or pm25 < 0:
+        return None
+    try:
+        val = _sub(float(pm25), PM25_BP)
+        return round(val, 1) if not np.isnan(val) else None
+    except Exception:
+        return None
+
+
+def get_all_india_live() -> list:
+    """
+    Returns a list of all active Indian AQI monitoring stations with their
+    latest AQI values, suitable for rendering on the map.
+
+    Data sources (merged, DB takes priority for our 29 cities):
+      1. Our DB — 29 cities with full pollutant data (always included)
+      2. OpenAQ v3 — all other active Indian stations (PM2.5-based AQI)
+
+    Result cached in memory for 30 minutes to avoid hammering OpenAQ.
+
+    Each entry:
+      {name, state, latitude, longitude, india_aqi, india_aqi_category,
+       station_name, pm2_5_ugm3, stale, source}
+    """
+    now = time.time()
+
+    # ── Return cache if fresh ─────────────────────────────────────────────────
+    if _INDIA_LIVE_CACHE.get("data") and (now - _INDIA_LIVE_CACHE.get("fetched_at", 0)) < _INDIA_LIVE_TTL:
+        return _INDIA_LIVE_CACHE["data"]
+
+    log.info("[V2] Fetching all-India live stations from OpenAQ…")
+    results = []
+    seen_loc_ids: set = set()
+
+    # ── Step 1: Pull from our DB (most accurate for the 29 cities) ───────────
+    try:
+        engine = _get_engine()
+        with engine.connect() as conn:
+            rows = conn.execute(text("""
+                SELECT
+                    c.name        AS city,
+                    c.state       AS state,
+                    c.latitude    AS lat,
+                    c.longitude   AS lon,
+                    a.india_aqi   AS aqi,
+                    a.india_aqi_category AS cat,
+                    a.pm2_5_ugm3  AS pm25,
+                    a.pm10_ugm3   AS pm10,
+                    a.no2_ugm3    AS no2,
+                    a.datetime    AS dt,
+                    ms.station_name AS sname
+                FROM aqi_data a
+                JOIN monitoring_stations ms ON a.station_id = ms.id
+                JOIN cities c              ON ms.city_id   = c.id
+                WHERE a.datetime = (
+                    SELECT MAX(a2.datetime)
+                    FROM aqi_data a2
+                    WHERE a2.station_id = a.station_id
+                )
+                ORDER BY c.name
+            """)).fetchall()
+
+        now_ist = datetime.utcnow() + timedelta(hours=5, minutes=30)
+        for r in rows:
+            stale = (now_ist - r.dt).total_seconds() > 3 * 3600 if r.dt else True
+            results.append({
+                "name":               r.city,
+                "state":              r.state,
+                "latitude":           float(r.lat),
+                "longitude":          float(r.lon),
+                "india_aqi":          float(r.aqi) if r.aqi is not None else None,
+                "india_aqi_category": r.cat,
+                "pm2_5_ugm3":         float(r.pm25) if r.pm25 is not None else None,
+                "pm10_ugm3":          float(r.pm10) if r.pm10 is not None else None,
+                "no2_ugm3":           float(r.no2)  if r.no2  is not None else None,
+                "station_name":       r.sname or r.city.title(),
+                "stale":              stale,
+                "source":             "db",
+            })
+        log.info("[V2] Loaded %d cities from DB", len(results))
+    except Exception as e:
+        log.warning("[V2] DB fetch failed: %s — continuing with OpenAQ only", e)
+
+    db_cities_lower = {r["name"].lower() for r in results}
+
+    # ── Step 2: OpenAQ — fetch all Indian locations ───────────────────────────
+    try:
+        all_locs = []
+        page = 1
+        while True:
+            try:
+                d = _oaq_get("/locations", {
+                    "country_id": "IN",
+                    "limit": 1000,
+                    "page": page,
+                    "mobile": "false",   # fixed stations only
+                })
+            except Exception as e:
+                log.warning("[V2] OpenAQ locations page %d failed: %s", page, e)
+                break
+            batch = d.get("results", [])
+            if not batch:
+                break
+            all_locs.extend(batch)
+            found_raw = d.get("meta", {}).get("found", 0)
+            try:
+                found = int(found_raw)
+            except (TypeError, ValueError):
+                found = len(all_locs) + 1
+            if len(all_locs) >= found:
+                break
+            page += 1
+            time.sleep(0.3)
+
+        log.info("[V2] OpenAQ returned %d Indian locations", len(all_locs))
+
+        # ── Step 3: Build station entries from OpenAQ locations ───────────────
+        for loc in all_locs:
+            coords = loc.get("coordinates") or {}
+            lat    = coords.get("latitude")
+            lon    = coords.get("longitude")
+            if lat is None or lon is None:
+                continue
+
+            loc_id   = loc.get("id")
+            loc_name = loc.get("name", "Unknown Station")
+
+            # Derive city name from loc_name (first part before comma/dash)
+            city_guess = loc_name.split(",")[0].split("-")[0].strip().lower()
+
+            # Skip if already covered by our 29 DB cities (within 10 km)
+            too_close = any(
+                _haversine(float(lat), float(lon), r["latitude"], r["longitude"]) < 10
+                for r in results
+                if r["source"] == "db"
+            )
+            if too_close:
+                seen_loc_ids.add(loc_id)
+                continue
+
+            if loc_id in seen_loc_ids:
+                continue
+            seen_loc_ids.add(loc_id)
+
+            # Try to get PM2.5 from the location's sensor parameters
+            pm25_val = None
+            sensors  = loc.get("sensors") or []
+            for s in sensors:
+                pname = (s.get("parameter") or {}).get("name", "").lower()
+                if pname in ("pm2.5", "pm25", "pm2_5"):
+                    # latestValue may be present in some API responses
+                    lv = s.get("latestValues") or s.get("latest") or {}
+                    v  = lv.get("value") if isinstance(lv, dict) else None
+                    if v is not None:
+                        try:
+                            pm25_val = float(v)
+                        except (TypeError, ValueError):
+                            pass
+                    break
+
+            india_aqi = _india_aqi_from_pm25(pm25_val) if pm25_val is not None else None
+            category  = _india_cat(india_aqi) if india_aqi is not None else "Unknown"
+
+            # Determine stale: use datetimeLast from location
+            stale = True
+            dt_last_str = (loc.get("datetimeLast") or {}).get("local") or \
+                          (loc.get("datetimeLast") or {}).get("utc")
+            if dt_last_str:
+                try:
+                    from datetime import timezone
+                    dt_last = datetime.fromisoformat(dt_last_str.replace("Z", "+00:00"))
+                    dt_last_naive = dt_last.replace(tzinfo=None)
+                    stale = (datetime.utcnow() - dt_last_naive).total_seconds() > 3 * 3600
+                except Exception:
+                    stale = True
+
+            # Determine state from known city proximity
+            state = "India"
+            for cname, cstate, clat, clon in CITIES:
+                if _haversine(float(lat), float(lon), clat, clon) < 50:
+                    state = cstate
+                    break
+
+            results.append({
+                "name":               city_guess or loc_name.lower(),
+                "state":              state,
+                "latitude":           float(lat),
+                "longitude":          float(lon),
+                "india_aqi":          india_aqi,
+                "india_aqi_category": category,
+                "pm2_5_ugm3":         pm25_val,
+                "pm10_ugm3":          None,
+                "no2_ugm3":           None,
+                "station_name":       loc_name,
+                "stale":              stale,
+                "source":             "openaq",
+            })
+
+        log.info("[V2] Total stations after merge: %d", len(results))
+
+    except Exception as e:
+        log.warning("[V2] OpenAQ all-stations fetch failed: %s — returning DB only", e)
+
+    # ── Cache and return ──────────────────────────────────────────────────────
+    _INDIA_LIVE_CACHE["data"]       = results
+    _INDIA_LIVE_CACHE["fetched_at"] = now
+    return results

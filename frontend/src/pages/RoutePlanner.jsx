@@ -724,47 +724,41 @@ export default function RoutePlanner() {
                 </span>
               )}
             </div>
-            {!result.single_path && (
-              <p className="text-gray-600 text-xs">Click a route card to preview it on the map</p>
-            )}
+            <p className="text-gray-600 text-xs">Click a route card to highlight it on the map</p>
           </div>
 
 
           {/* Map box */}
           <div className="card p-0 overflow-hidden border border-gray-700">
             <div className="flex items-center gap-4 px-4 py-2.5 bg-gray-800/80 border-b border-gray-700 flex-wrap">
-              <span className="text-xs text-gray-400 font-medium">
-                {result.single_path ? 'Single path:' : 'Viewing:'}
-              </span>
-              {result.routes?.map(r => {
-                const isDupe = result.single_path && r.route_type !== 'fastest'
-                return (
-                  <button
-                    key={r.route_type}
-                    onClick={() => !isDupe && setSelectedRoute(r.route_type)}
-                    disabled={isDupe}
-                    className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors capitalize ${
-                      isDupe
-                        ? 'border-gray-700 text-gray-600 cursor-default'
-                        : selectedRoute === r.route_type
-                          ? `${ROUTE_BORDER[r.route_type]} ${ROUTE_COLOUR[r.route_type]} bg-gray-700`
-                          : 'border-gray-700 text-gray-500 hover:border-gray-500'
-                    }`}
-                  >
-                    {ROUTE_ICON[r.route_type]}
-                    {r.route_type}
-                    {isDupe && <span className="text-gray-600 text-[10px] ml-0.5">(same)</span>}
-                  </button>
-                )
-              })}
-              {!result.single_path && (
-                <div className="ml-auto flex items-center gap-3 text-xs text-gray-500">
-                  <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded bg-sky-400 inline-block"/>Fastest</span>
-                  <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded bg-green-400 inline-block"/>Clean</span>
-                  <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded bg-purple-400 inline-block"/>Balanced</span>
-                </div>
-              )}
+              <span className="text-xs text-gray-400 font-medium">Highlight:</span>
+              {result.routes?.map(r => (
+                <button
+                  key={r.route_type}
+                  onClick={() => setSelectedRoute(r.route_type)}
+                  className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors capitalize ${
+                    selectedRoute === r.route_type
+                      ? `${ROUTE_BORDER[r.route_type]} ${ROUTE_COLOUR[r.route_type]} bg-gray-700`
+                      : 'border-gray-700 text-gray-500 hover:border-gray-500'
+                  }`}
+                >
+                  {ROUTE_ICON[r.route_type]}
+                  {r.route_type}
+                </button>
+              ))}
+              {/* Colour legend — always visible */}
+              <div className="ml-auto flex items-center gap-3 text-xs text-gray-500">
+                <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded bg-sky-400 inline-block"/>Fastest</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded bg-green-400 inline-block"/>Cleanest</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded bg-purple-400 inline-block"/>Balanced</span>
+              </div>
             </div>
+            {result.single_path && (
+              <div className="px-4 py-2 bg-sky-900/10 border-b border-sky-900/30 text-xs text-sky-400 flex items-center gap-2">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                Same road path — fastest &amp; cleanest take identical roads; AQI scores differ by weighting.
+              </div>
+            )}
 
             <Suspense fallback={
               <div className="flex items-center justify-center bg-gray-800" style={{ height:'380px' }}>

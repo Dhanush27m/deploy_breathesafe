@@ -1,28 +1,40 @@
 /**
  * AQIMap — Interactive India map with AQI pin markers
  *
- * Props:
- *   cities  : array of { city, state, latitude, longitude, india_aqi, india_aqi_category }
- *   onSelect: optional callback(city) when a pin is clicked
+ * V2 props:
+ *   allStations : array of all-India stations from /aqi/india-stations
+ *                 Each: { name, state, latitude, longitude, india_aqi,
+ *                         india_aqi_category, station_name, stale, source }
+ *   cities      : legacy fallback — 29 DB city rankings from /aqi/rankings
+ *                 (used when allStations is not provided)
+ *   onSelect    : optional callback(station) when a pin is clicked
+ *
+ * Features:
+ *   • Leaflet.markercluster for smooth performance with 200+ stations
+ *   • Grey markers for stale data (>3 h since last reading)
+ *   • Popup shows station name, state, AQI, PM2.5, staleness warning
  */
 
 import { useEffect, useRef, useState } from 'react'
 import 'leaflet/dist/leaflet.css'
+import 'leaflet.markercluster/dist/MarkerCluster.css'
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 
-// Tracks when the Leaflet map instance is ready so the marker effect can depend on it
-
-// AQI category → colours (background, border, text)
+// ── AQI category colours ──────────────────────────────────────────────────────
 const AQI_COLOUR = {
-  'Good':                { bg: '#16a34a', border: '#15803d', text: '#fff' },   // green-600
-  'Satisfactory':        { bg: '#65a30d', border: '#4d7c0f', text: '#fff' },   // lime-600
-  'Moderately Polluted': { bg: '#ca8a04', border: '#a16207', text: '#fff' },   // yellow-600
-  'Poor':                { bg: '#ea580c', border: '#c2410c', text: '#fff' },   // orange-600
-  'Very Poor':           { bg: '#dc2626', border: '#b91c1c', text: '#fff' },   // red-600
-  'Severe':              { bg: '#7c3aed', border: '#6d28d9', text: '#fff' },   // violet-600
+  'Good':                { bg: '#16a34a', border: '#15803d', text: '#fff' },
+  'Satisfactory':        { bg: '#65a30d', border: '#4d7c0f', text: '#fff' },
+  'Moderately Polluted': { bg: '#ca8a04', border: '#a16207', text: '#fff' },
+  'Poor':                { bg: '#ea580c', border: '#c2410c', text: '#fff' },
+  'Very Poor':           { bg: '#dc2626', border: '#b91c1c', text: '#fff' },
+  'Severe':              { bg: '#7c3aed', border: '#6d28d9', text: '#fff' },
+  'Unknown':             { bg: '#6b7280', border: '#4b5563', text: '#fff' },
 }
+const STALE_COLOUR = { bg: '#9ca3af', border: '#6b7280', text: '#fff' }
 
-function aqiColour(category) {
-  return AQI_COLOUR[category] ?? { bg: '#6b7280', border: '#4b5563', text: '#fff' }
+function aqiColour(category, stale) {
+  if (stale) return STALE_COLOUR
+  return AQI_COLOUR[category] ?? AQI_COLOUR['Unknown']
 }
 
 // Fix Leaflet default marker icons broken by Vite/webpack bundlers
@@ -35,10 +47,10 @@ function fixLeafletIcons(L) {
   })
 }
 
-// Build a custom HTML pin icon for a given AQI value + category
-function makePinIcon(L, aqi, category) {
-  const c = aqiColour(category)
-  const val = Math.round(aqi ?? 0)
+// Build a custom HTML bubble pin icon
+function makePinIcon(L, aqi, category, stale) {
+  const c   = aqiColour(category, stale)
+  const val = aqi != null ? Math.round(aqi) : '—'
   return L.divIcon({
     className: '',
     html: `
@@ -49,8 +61,8 @@ function makePinIcon(L, aqi, category) {
         align-items:center;
         filter:drop-shadow(0 2px 4px rgba(0,0,0,0.55));
         cursor:pointer;
+        ${stale ? 'opacity:0.65;' : ''}
       ">
-        <!-- Bubble -->
         <div style="
           background:${c.bg};
           border:2px solid ${c.border};
@@ -65,7 +77,6 @@ function makePinIcon(L, aqi, category) {
           white-space:nowrap;
           line-height:1.5;
         ">${val}</div>
-        <!-- Pointer triangle -->
         <div style="
           width:0; height:0;
           border-left:5px solid transparent;
@@ -80,34 +91,54 @@ function makePinIcon(L, aqi, category) {
   })
 }
 
-export default function AQIMap({ cities = [], onSelect }) {
-  const containerRef = useRef(null)
-  const mapRef       = useRef(null)
-  const markersRef   = useRef([])
-  // FIX: track map readiness as state so the marker effect re-runs after init
+// Normalise a station entry regardless of whether it came from
+// /aqi/india-stations (name/station_name fields) or /aqi/rankings (city field)
+function normalise(s) {
+  return {
+    displayName: s.station_name || s.city || s.name || 'Station',
+    city:        s.city || s.name || '',
+    state:       s.state || '',
+    latitude:    s.latitude,
+    longitude:   s.longitude,
+    india_aqi:   s.india_aqi,
+    india_aqi_category: s.india_aqi_category || 'Unknown',
+    pm2_5_ugm3:  s.pm2_5_ugm3,
+    stale:       !!s.stale,
+    source:      s.source || 'db',
+  }
+}
+
+export default function AQIMap({ allStations, cities = [], onSelect }) {
+  const containerRef   = useRef(null)
+  const mapRef         = useRef(null)
+  const clusterRef     = useRef(null)
   const [mapReady, setMapReady] = useState(false)
 
-  // ── Init map once ─────────────────────────────────────────────────────────
+  // Prefer allStations (V2); fall back to legacy cities prop
+  const stations = (allStations && allStations.length > 0) ? allStations : cities
+
+  // ── Init map once ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
 
-    import('leaflet').then(({ default: L }) => {
-      // Guard: component may have unmounted during the async import
+    Promise.all([
+      import('leaflet'),
+      import('leaflet.markercluster'),
+    ]).then(([{ default: L }]) => {
       if (!containerRef.current || mapRef.current) return
 
       fixLeafletIcons(L)
 
       const map = L.map(containerRef.current, {
-        center:             [22.5, 82.5],   // centre of India
+        center:             [22.5, 82.5],
         zoom:               5,
         zoomControl:        true,
         attributionControl: true,
         scrollWheelZoom:    true,
         minZoom:            4,
-        maxZoom:            12,
+        maxZoom:            14,
       })
 
-      // Light tile layer
       L.tileLayer(
         'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
         {
@@ -118,47 +149,84 @@ export default function AQIMap({ cities = [], onSelect }) {
       ).addTo(map)
 
       mapRef.current = map
-      // Signal that the map is ready → triggers the marker effect below
       setMapReady(true)
     })
 
     return () => {
       if (mapRef.current) {
         mapRef.current.remove()
-        mapRef.current = null
-        markersRef.current = []
+        mapRef.current  = null
+        clusterRef.current = null
       }
     }
   }, [])
 
-  // ── Drop / update markers whenever cities data changes OR map becomes ready ─
-  // mapReady is in the deps array so this effect fires once the async map init
-  // completes, even if cities was already loaded before the map was ready.
+  // ── Drop / update markers whenever stations data changes or map becomes ready ─
   useEffect(() => {
-    if (!mapReady || !mapRef.current || !cities.length) return
+    if (!mapReady || !mapRef.current || !stations.length) return
 
-    import('leaflet').then(({ default: L }) => {
+    Promise.all([
+      import('leaflet'),
+      import('leaflet.markercluster'),
+    ]).then(([{ default: L }]) => {
       const map = mapRef.current
       if (!map) return
 
-      // Remove old markers
-      markersRef.current.forEach(m => map.removeLayer(m))
-      markersRef.current = []
+      // Remove previous cluster group
+      if (clusterRef.current) {
+        map.removeLayer(clusterRef.current)
+        clusterRef.current = null
+      }
 
-      cities.forEach(city => {
-        if (city.latitude == null || city.longitude == null) return
+      // Create a fresh cluster group
+      const clusterGroup = L.markerClusterGroup({
+        maxClusterRadius: 40,
+        spiderfyOnMaxZoom: true,
+        showCoverageOnHover: false,
+        zoomToBoundsOnClick: true,
+        iconCreateFunction: (cluster) => {
+          const count = cluster.getChildCount()
+          const size  = count < 10 ? 32 : count < 50 ? 40 : 48
+          return L.divIcon({
+            html: `<div style="
+              background: rgba(14,165,233,0.85);
+              border: 2px solid #0369a1;
+              border-radius: 50%;
+              width: ${size}px;
+              height: ${size}px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 12px;
+              font-weight: 700;
+              color: #fff;
+              font-family: -apple-system, sans-serif;
+              box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            ">${count}</div>`,
+            className: '',
+            iconSize:  [size, size],
+          })
+        },
+      })
 
-        const icon = makePinIcon(L, city.india_aqi, city.india_aqi_category)
-        const marker = L.marker([city.latitude, city.longitude], { icon })
+      stations.forEach(raw => {
+        const s = normalise(raw)
+        if (s.latitude == null || s.longitude == null) return
 
-        // Rich popup
-        const c = aqiColour(city.india_aqi_category)
+        const icon   = makePinIcon(L, s.india_aqi, s.india_aqi_category, s.stale)
+        const marker = L.marker([s.latitude, s.longitude], { icon })
+
+        const c = aqiColour(s.india_aqi_category, s.stale)
+        const aqiLabel = s.india_aqi != null ? Math.round(s.india_aqi) : 'No data'
+
         marker.bindPopup(`
-          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-width:160px;">
-            <div style="font-size:14px;font-weight:700;color:#1f2937;margin-bottom:4px;text-transform:capitalize;">
-              ${city.city}
+          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-width:170px;">
+            <div style="font-size:13px;font-weight:700;color:#1f2937;margin-bottom:2px;text-transform:capitalize;">
+              ${s.displayName}
             </div>
-            <div style="font-size:11px;color:#6b7280;margin-bottom:8px;text-transform:capitalize;">${city.state}</div>
+            <div style="font-size:11px;color:#6b7280;margin-bottom:6px;text-transform:capitalize;">
+              ${s.state}
+            </div>
             <div style="
               display:inline-block;
               background:${c.bg};
@@ -167,29 +235,38 @@ export default function AQIMap({ cities = [], onSelect }) {
               padding:2px 10px;
               border-radius:6px;
               margin-bottom:4px;
-            ">AQI ${Math.round(city.india_aqi ?? 0)}</div>
-            <div style="font-size:11px;color:#374151;">${city.india_aqi_category ?? ''}</div>
-            ${city.pm2_5_ugm3 != null ? `<div style="font-size:11px;color:#6b7280;margin-top:4px;">PM2.5: ${city.pm2_5_ugm3.toFixed(1)} µg/m³</div>` : ''}
+            ">AQI ${aqiLabel}</div>
+            <div style="font-size:11px;color:#374151;">${s.india_aqi_category}</div>
+            ${s.pm2_5_ugm3 != null
+              ? `<div style="font-size:11px;color:#6b7280;margin-top:4px;">PM2.5: ${Number(s.pm2_5_ugm3).toFixed(1)} µg/m³</div>`
+              : ''}
+            ${s.stale
+              ? `<div style="font-size:10px;color:#f59e0b;margin-top:5px;font-weight:600;">⚠ Data may be outdated</div>`
+              : ''}
+            ${s.source === 'openaq'
+              ? `<div style="font-size:9px;color:#9ca3af;margin-top:2px;">Source: OpenAQ</div>`
+              : ''}
           </div>
         `, {
           className:   'aqi-popup',
-          maxWidth:    220,
+          maxWidth:    240,
           closeButton: true,
         })
 
         if (onSelect) {
-          marker.on('click', () => onSelect(city))
+          marker.on('click', () => onSelect(raw))
         }
 
-        marker.addTo(map)
-        markersRef.current.push(marker)
+        clusterGroup.addLayer(marker)
       })
+
+      map.addLayer(clusterGroup)
+      clusterRef.current = clusterGroup
     })
-  }, [cities, onSelect, mapReady])
+  }, [stations, onSelect, mapReady])
 
   return (
     <>
-      {/* Inject popup styles globally once */}
       <style>{`
         .aqi-popup .leaflet-popup-content-wrapper {
           background: #ffffff;
@@ -210,11 +287,11 @@ export default function AQIMap({ cities = [], onSelect }) {
           top: 6px !important;
           right: 8px !important;
         }
+        .leaflet-cluster-anim .leaflet-marker-icon,
+        .leaflet-cluster-anim .leaflet-marker-shadow {
+          transition: transform 0.3s ease-out, opacity 0.3s ease-in;
+        }
       `}</style>
-      {/*
-        isolation:isolate creates a new stacking context so Leaflet's internal
-        z-indexes don't leak out and overlap the sticky navbar above.
-      */}
       <div style={{ isolation: 'isolate', position: 'relative' }}>
         <div
           ref={containerRef}

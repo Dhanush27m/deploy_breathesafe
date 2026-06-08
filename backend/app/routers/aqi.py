@@ -181,7 +181,40 @@ def dataset_stats(db: Session = Depends(get_db)):
     }
 
 
-# ── 5. Current AQI for one city ───────────────────────────────────────────────
+# ── 5. V2: All India live stations (200+ CPCB) ────────────────────────────────
+@router.get("/india-stations", response_model=List[dict])
+def india_stations():
+    """
+    Returns ALL active Indian AQI monitoring stations with live data.
+
+    Merges:
+      • Our 29 DB cities (full pollutant data, most accurate)
+      • OpenAQ v3 — all other CPCB stations (~200+ total)
+
+    Cached 30 min in-memory to avoid hammering OpenAQ.
+    Each entry: name, state, latitude, longitude, india_aqi,
+                india_aqi_category, station_name, pm2_5_ugm3, stale, source
+    """
+    from app.services.data_pipeline import get_all_india_live
+    return get_all_india_live()
+
+
+# ── 6. V2: Stations filtered by state ────────────────────────────────────────
+@router.get("/by-state", response_model=List[dict])
+def stations_by_state(
+    state: str = Query(..., description="State name (case-insensitive), e.g. 'Maharashtra'"),
+):
+    """
+    Returns live station data for all cities/stations in the given state.
+    Uses the same cached all-India dataset as /india-stations.
+    """
+    from app.services.data_pipeline import get_all_india_live
+    all_stations = get_all_india_live()
+    state_lower  = state.strip().lower()
+    return [s for s in all_stations if (s.get("state") or "").lower() == state_lower]
+
+
+# ── 7. Current AQI for one city ───────────────────────────────────────────────
 @router.get("/{city_name}/current", response_model=dict)
 def city_current(city_name: str, db: Session = Depends(get_db)):
     """Latest AQI reading for the given city (case-insensitive)."""

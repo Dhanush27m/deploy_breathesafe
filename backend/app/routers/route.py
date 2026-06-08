@@ -58,9 +58,16 @@ async def get_optional_user(
 
 # ── Helper: build city → (lat, lon, latest_aqi) map ──────────────────────────
 def _build_city_aqi_map(db: Session) -> dict:
-    """Return dict {city_name: (lat, lon, aqi)} using latest AQI per city."""
+    """
+    Return dict {station_name: (lat, lon, aqi)} for AQI sampling along routes.
+
+    V2: merges ALL active Indian CPCB stations (~200+) from the live OpenAQ cache
+    with our 29 DB cities (DB values take priority for those cities).
+    Falls back to DB-only if the live cache is unavailable.
+    """
     from sqlalchemy import func
 
+    # ── DB data (29 cities, most accurate) ───────────────────────────────────
     latest_sub = (
         db.query(
             AQIData.station_id,
@@ -82,10 +89,28 @@ def _build_city_aqi_map(db: Session) -> dict:
         .all()
     )
 
-    return {
+    city_map: dict = {
         city.name: (city.latitude, city.longitude, aqi.india_aqi or 100.0)
         for aqi, city in rows
     }
+
+    # ── V2: Augment with all-India OpenAQ stations ────────────────────────────
+    try:
+        from app.services.data_pipeline import get_all_india_live
+        live_stations = get_all_india_live()
+        for s in live_stations:
+            if s.get("source") == "openaq" and s.get("india_aqi") is not None:
+                key = s.get("station_name") or s.get("name") or ""
+                if key and key not in city_map:
+                    city_map[key] = (
+                        s["latitude"],
+                        s["longitude"],
+                        float(s["india_aqi"]),
+                    )
+    except Exception as e:
+        logger.warning("_build_city_aqi_map: OpenAQ augment failed: %s", e)
+
+    return city_map
 
 
 # ── Helper: convert OSRM route → internal dict ───────────────────────────────
