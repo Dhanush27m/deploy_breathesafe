@@ -1,0 +1,91 @@
+# ── Environment & Secrets (NEVER commit) ─────────────────────────────────────
+# All secrets go in Render / Vercel environment variable settings, NOT in files.
+# Copy .env.example → .env and fill in your values locally.
+.env
+**/.env
+*.env.local
+*.env.production
+*.env.staging
+.env.*
+!.env.example
+
+# ── Credential & key files ─────────────────────────────────────────────────────
+dbpass.txt
+*.key
+*.pem
+*.p12
+*.pfx
+*.cert
+*.crt
+secrets.json
+credentials.json
+service-account*.json
+*_secret*
+*_credentials*
+
+# ── Hosting / deployment guides (contain live URLs, project IDs) ──────────────
+HOSTING_GUIDE.md
+DEPLOY_NOTES.md
+DEPLOYMENT.md
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# ── ML Models — DO NOT IGNORE — must be committed for cloud Docker build ──────
+# The .joblib files in backend/ml/models/ MUST be in git so that Render's
+# Docker build (which has no access to local Docker volumes) can COPY them
+# into the image via "COPY . ." in the backend Dockerfile.
+#
+# To copy models from the local Docker volume before first push:
+#   docker run --rm `
+#     -v deploy_breathesafe_ml_models_deploy:/src `
+#     -v "C:\Users\<your-username>\deployment_version_pro\deploy_breathesafe\backend\ml\models:/dst" `
+#     alpine sh -c "cp -r /src/. /dst/"
+# Then: git add backend/ml/models/ && git commit -m "add ML models"
+
+# ── Data files (large CSVs) ───────────────────────────────────────────────────
+# The master CSV is not needed in the deploy repo — the DB is seeded via
+# seed_data.py and kept current by the backend's automated pipeline.
+data/*.csv
+data/raw/
+data/openaq_stations_cache.json
+
+# ── Node / Frontend ───────────────────────────────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Test artifacts ────────────────────────────────────────────────────────────
+.pytest_cache/
+htmlcov/
+.coverage
+
+# ── Local dev scratch files ───────────────────────────────────────────────────
+test_write_check.txt

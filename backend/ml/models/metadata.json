@@ -1,0 +1,327 @@
+{
+  "trained_at": "2026-05-09T09:45:34.916212",
+  "model_version": "v2.0",
+  "trained_on_rows": 942761,
+  "n_features": 27,
+  "feature_cols": [
+    "hour",
+    "day_of_week",
+    "month",
+    "day_of_year",
+    "week_of_year",
+    "is_weekend",
+    "season_enc",
+    "lag_24h",
+    "lag_48h",
+    "lag_72h",
+    "lag_168h",
+    "lag_336h",
+    "rolling_24h_mean",
+    "rolling_3d_mean",
+    "rolling_7d_mean",
+    "rolling_14d_mean",
+    "rolling_7d_std",
+    "rolling_3d_std",
+    "temperature_c",
+    "wind_speed_kmh",
+    "humidity_percent",
+    "pressure_msl_hpa",
+    "wind_gusts_kmh",
+    "precipitation_mm",
+    "is_raining",
+    "festival_period",
+    "crop_burning_season"
+  ],
+  "cities": {
+    "agartala": {
+      "xgb": {
+        "mae": 28.56,
+        "rmse": 38.95,
+        "best_n_estimators": 214,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "ahmedabad": {
+      "xgb": {
+        "mae": 13.07,
+        "rmse": 17.39,
+        "best_n_estimators": 357,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "aizawl": {
+      "xgb": {
+        "mae": 14.12,
+        "rmse": 18.72,
+        "best_n_estimators": 599,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "bengaluru": {
+      "xgb": {
+        "mae": 16.18,
+        "rmse": 23.02,
+        "best_n_estimators": 373,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "bhopal": {
+      "xgb": {
+        "mae": 10.5,
+        "rmse": 13.38,
+        "best_n_estimators": 735,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "bhubaneswar": {
+      "xgb": {
+        "mae": 16.1,
+        "rmse": 22.83,
+        "best_n_estimators": 1000,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "chandigarh": {
+      "xgb": {
+        "mae": 17.73,
+        "rmse": 28.84,
+        "best_n_estimators": 106,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "chennai": {
+      "xgb": {
+        "mae": 8.47,
+        "rmse": 11.81,
+        "best_n_estimators": 325,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "dehradun": {
+      "xgb": {
+        "mae": 14.63,
+        "rmse": 19.57,
+        "best_n_estimators": 674,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "delhi": {
+      "xgb": {
+        "mae": 94.91,
+        "rmse": 116.04,
+        "best_n_estimators": 159,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "gangtok": {
+      "xgb": {
+        "mae": 13.33,
+        "rmse": 17.51,
+        "best_n_estimators": 370,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "gurugram": {
+      "xgb": {
+        "mae": 108.67,
+        "rmse": 124.59,
+        "best_n_estimators": 402,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "guwahati": {
+      "xgb": {
+        "mae": 14.5,
+        "rmse": 18.39,
+        "best_n_estimators": 286,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "hyderabad": {
+      "xgb": {
+        "mae": 13.57,
+        "rmse": 18.16,
+        "best_n_estimators": 178,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "imphal": {
+      "xgb": {
+        "mae": 17.52,
+        "rmse": 24.75,
+        "best_n_estimators": 448,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "itanagar": {
+      "xgb": {
+        "mae": 11.54,
+        "rmse": 15.03,
+        "best_n_estimators": 492,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "jaipur": {
+      "xgb": {
+        "mae": 55.38,
+        "rmse": 82.2,
+        "best_n_estimators": 127,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "kohima": {
+      "xgb": {
+        "mae": 10.91,
+        "rmse": 14.48,
+        "best_n_estimators": 356,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "kolkata": {
+      "xgb": {
+        "mae": 21.3,
+        "rmse": 30.02,
+        "best_n_estimators": 646,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "lucknow": {
+      "xgb": {
+        "mae": 43.4,
+        "rmse": 68.06,
+        "best_n_estimators": 86,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "mumbai": {
+      "xgb": {
+        "mae": 21.41,
+        "rmse": 29.73,
+        "best_n_estimators": 529,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "panaji": {
+      "xgb": {
+        "mae": 12.87,
+        "rmse": 17.1,
+        "best_n_estimators": 880,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "patna": {
+      "xgb": {
+        "mae": 24.98,
+        "rmse": 36.61,
+        "best_n_estimators": 648,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "raipur": {
+      "xgb": {
+        "mae": 26.21,
+        "rmse": 32.67,
+        "best_n_estimators": 353,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "ranchi": {
+      "xgb": {
+        "mae": 19.75,
+        "rmse": 26.68,
+        "best_n_estimators": 233,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "shillong": {
+      "xgb": {
+        "mae": 13.42,
+        "rmse": 17.26,
+        "best_n_estimators": 392,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "shimla": {
+      "xgb": {
+        "mae": 14.72,
+        "rmse": 18.32,
+        "best_n_estimators": 329,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "thiruvananthapuram": {
+      "xgb": {
+        "mae": 9.1,
+        "rmse": 11.85,
+        "best_n_estimators": 148,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    },
+    "visakhapatnam": {
+      "xgb": {
+        "mae": 10.26,
+        "rmse": 13.95,
+        "best_n_estimators": 245,
+        "train_rows": 31501,
+        "test_rows": 672
+      },
+      "prophet": {}
+    }
+  }
+}

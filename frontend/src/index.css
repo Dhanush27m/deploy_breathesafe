@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-950 text-white font-sans antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    @apply w-1.5;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-gray-900;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-sky-600 rounded-full;
+  }
+}
+
+@layer components {
+  /* AQI badge colours */
+  .aqi-good        { @apply bg-green-600 text-white; }
+  .aqi-satisfactory{ @apply bg-lime-500 text-white; }
+  .aqi-moderate    { @apply bg-yellow-400 text-gray-900; }
+  .aqi-poor        { @apply bg-orange-500 text-white; }
+  .aqi-verypoor    { @apply bg-red-600 text-white; }
+  .aqi-severe      { @apply bg-purple-700 text-white; }
+
+  /* Card base */
+  .card {
+    @apply bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-lg;
+  }
+
+  /* Primary button */
+  .btn-primary {
+    @apply bg-sky-600 hover:bg-sky-500 text-white font-semibold
+           px-5 py-2.5 rounded-xl transition-colors duration-200;
+  }
+
+  /* Input field — use .input-field or .input interchangeably */
+  .input-field,
+  .input {
+    @apply w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5
+           text-white placeholder-gray-500 focus:outline-none
+           focus:ring-2 focus:ring-sky-500 transition;
+  }
+
+  /* Select elements — override browser default white bg on the element and its options */
+  select.input-field,
+  select.input {
+    @apply appearance-none cursor-pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 2.25rem;
+  }
+
+  /* Force dark background on native <option> elements */
+  select.input-field option,
+  select.input option {
+    background-color: #1f2937;
+    color: #f9fafb;
+  }
+
+  /* Form label */
+  .label {
+    @apply block text-xs font-medium text-gray-400 uppercase tracking-wide mb-1.5;
+  }
+
+  /* Secondary button */
+  .btn-secondary {
+    @apply bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300
+           font-semibold px-5 py-2.5 rounded-xl transition-colors duration-200;
+  }
+
+  /* Range slider */
+  input[type="range"].input,
+  input[type="range"].input-field {
+    @apply h-2 rounded-full appearance-none cursor-pointer bg-gray-700;
+    accent-color: #0284c7;
+  }
+
+  /* Summary chip */
+  .chip {
+    @apply text-xs bg-gray-800 border border-gray-700 text-gray-400 px-3 py-1 rounded-full;
+  }
+}
