@@ -946,7 +946,7 @@ def _india_aqi_from_pm25(pm25: float) -> float | None:
         return None
 
 
-def get_all_india_live() -> list:
+def get_all_india_live(db=None) -> list:
     """
     Returns a list of all active Indian AQI monitoring stations with their
     latest AQI values, suitable for rendering on the map.
@@ -954,6 +954,11 @@ def get_all_india_live() -> list:
     Data sources (merged, DB takes priority for our 29 cities):
       1. Our DB — 29 cities with full pollutant data (always included)
       2. OpenAQ v3 — all other active Indian stations (PM2.5-based AQI)
+
+    Args:
+        db: Optional SQLAlchemy session (from FastAPI Depends). When provided,
+            reuses the FastAPI connection pool instead of creating a new engine.
+            Falls back to _get_engine() if None (used by background jobs).
 
     Result cached in memory for 30 minutes to avoid hammering OpenAQ.
 
@@ -967,37 +972,45 @@ def get_all_india_live() -> list:
     if _INDIA_LIVE_CACHE.get("data") and (now - _INDIA_LIVE_CACHE.get("fetched_at", 0)) < _INDIA_LIVE_TTL:
         return _INDIA_LIVE_CACHE["data"]
 
-    log.info("[V2] Fetching all-India live stations from OpenAQ…")
+    log.info("[V2] Fetching all-India live stations…")
     results = []
     seen_loc_ids: set = set()
 
     # ── Step 1: Pull from our DB (most accurate for the 29 cities) ───────────
+    # Use the injected FastAPI session when available (reuses existing pool,
+    # avoids connection exhaustion on Supabase free tier). Fall back to
+    # _get_engine() only for background/CLI callers that have no session.
+    _DB_QUERY = text("""
+        SELECT
+            c.name          AS city,
+            c.state         AS state,
+            c.latitude      AS lat,
+            c.longitude     AS lon,
+            a.india_aqi     AS aqi,
+            a.india_aqi_category AS cat,
+            a.pm2_5_ugm3    AS pm25,
+            a.pm10_ugm3     AS pm10,
+            a.no2_ugm3      AS no2,
+            a.datetime      AS dt,
+            ms.station_name AS sname
+        FROM aqi_data a
+        JOIN monitoring_stations ms ON a.station_id = ms.id
+        JOIN cities c               ON ms.city_id   = c.id
+        JOIN (
+            SELECT station_id, MAX(datetime) AS max_dt
+            FROM aqi_data
+            GROUP BY station_id
+        ) latest ON a.station_id = latest.station_id
+               AND a.datetime    = latest.max_dt
+        ORDER BY c.name
+    """)
     try:
-        engine = _get_engine()
-        with engine.connect() as conn:
-            rows = conn.execute(text("""
-                SELECT
-                    c.name        AS city,
-                    c.state       AS state,
-                    c.latitude    AS lat,
-                    c.longitude   AS lon,
-                    a.india_aqi   AS aqi,
-                    a.india_aqi_category AS cat,
-                    a.pm2_5_ugm3  AS pm25,
-                    a.pm10_ugm3   AS pm10,
-                    a.no2_ugm3    AS no2,
-                    a.datetime    AS dt,
-                    ms.station_name AS sname
-                FROM aqi_data a
-                JOIN monitoring_stations ms ON a.station_id = ms.id
-                JOIN cities c              ON ms.city_id   = c.id
-                WHERE a.datetime = (
-                    SELECT MAX(a2.datetime)
-                    FROM aqi_data a2
-                    WHERE a2.station_id = a.station_id
-                )
-                ORDER BY c.name
-            """)).fetchall()
+        if db is not None:
+            rows = db.execute(_DB_QUERY).fetchall()
+        else:
+            engine = _get_engine()
+            with engine.connect() as conn:
+                rows = conn.execute(_DB_QUERY).fetchall()
 
         now_ist = datetime.utcnow() + timedelta(hours=5, minutes=30)
         for r in rows:
@@ -1081,20 +1094,28 @@ def get_all_india_live() -> list:
                 continue
             seen_loc_ids.add(loc_id)
 
-            # Try to get PM2.5 from the location's sensor parameters
+            # Try to get PM2.5 from the location's sensor parameters.
+            # OpenAQ v3 /locations response: sensor objects may carry
+            # 'latestValue' (a plain float), 'latestValues' (dict with
+            # 'value' key), or 'latest' (dict). We try all three shapes.
             pm25_val = None
             sensors  = loc.get("sensors") or []
             for s in sensors:
                 pname = (s.get("parameter") or {}).get("name", "").lower()
                 if pname in ("pm2.5", "pm25", "pm2_5"):
-                    # latestValue may be present in some API responses
-                    lv = s.get("latestValues") or s.get("latest") or {}
-                    v  = lv.get("value") if isinstance(lv, dict) else None
-                    if v is not None:
-                        try:
-                            pm25_val = float(v)
-                        except (TypeError, ValueError):
-                            pass
+                    raw_lv = (s.get("latestValue")
+                              or s.get("latestValues")
+                              or s.get("latest"))
+                    if isinstance(raw_lv, (int, float)):
+                        # Plain numeric value
+                        pm25_val = float(raw_lv)
+                    elif isinstance(raw_lv, dict):
+                        v = raw_lv.get("value")
+                        if v is not None:
+                            try:
+                                pm25_val = float(v)
+                            except (TypeError, ValueError):
+                                pass
                     break
 
             india_aqi = _india_aqi_from_pm25(pm25_val) if pm25_val is not None else None

@@ -183,7 +183,7 @@ def dataset_stats(db: Session = Depends(get_db)):
 
 # ── 5. V2: All India live stations (200+ CPCB) ────────────────────────────────
 @router.get("/india-stations", response_model=List[dict])
-def india_stations():
+def india_stations(db: Session = Depends(get_db)):
     """
     Returns ALL active Indian AQI monitoring stations with live data.
 
@@ -196,7 +196,7 @@ def india_stations():
                 india_aqi_category, station_name, pm2_5_ugm3, stale, source
     """
     from app.services.data_pipeline import get_all_india_live
-    return get_all_india_live()
+    return get_all_india_live(db=db)
 
 
 # ── 6. V2: Stations filtered by state ────────────────────────────────────────
