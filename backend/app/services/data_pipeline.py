@@ -1144,3 +1144,74 @@ def get_all_india_live() -> list:
     _INDIA_LIVE_CACHE["data"]       = results
     _INDIA_LIVE_CACHE["fetched_at"] = now
     return results
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# V3: CAMS forecast AQI for any lat/lon at a specific future datetime
+# ─────────────────────────────────────────────────────────────────────────────
+
+# {(lat_bucket, lon_bucket, date_str, hour): aqi_or_None}
+# Keyed by 0.5° grid cell + date/hour — nearby route stations share cache
+# entries, keeping CAMS API calls to ~5–10 per route even with 200+ stations.
+_CAMS_ROUTE_CACHE: dict = {}
+
+
+def get_cams_forecast_aqi(lat: float, lon: float, target_dt: datetime) -> float | None:
+    """
+    Return India AQI for an arbitrary lat/lon at a specific future datetime,
+    using the CAMS (Copernicus Atmosphere Monitoring Service) forecast via
+    Open-Meteo's air-quality API (free, no key required, up to 5 days ahead).
+
+    Results are cached per 0.5° grid cell + date/hour (session-lifetime cache).
+    Nearby stations within ~55 km share the same cache entry, so a typical
+    200 km route needs only 4–8 unique CAMS calls.
+
+    Args:
+        lat, lon:   Station coordinates (degrees)
+        target_dt:  Departure datetime (IST assumed if no tzinfo)
+
+    Returns:
+        India AQI (float, 0–500) or None on API failure / missing data
+    """
+    # ── Snap to 0.5° grid for cache key ──────────────────────────────────────
+    lat_b = round(lat * 2) / 2
+    lon_b = round(lon * 2) / 2
+    date_str  = target_dt.strftime("%Y-%m-%d")
+    cache_key = (lat_b, lon_b, date_str, target_dt.hour)
+
+    if cache_key in _CAMS_ROUTE_CACHE:
+        return _CAMS_ROUTE_CACHE[cache_key]
+
+    aqi = None
+    try:
+        d = _get(
+            "https://air-quality-api.open-meteo.com/v1/air-quality?"
+            + urlencode({
+                "latitude":      lat_b,
+                "longitude":     lon_b,
+                "start_date":    date_str,
+                "end_date":      date_str,
+                "hourly":        "pm2_5",
+                "timezone":      "Asia/Kolkata",
+                "forecast_days": 5,
+            })
+        )
+        hourly = d.get("hourly", {})
+        times  = hourly.get("time", [])
+        pm25s  = hourly.get("pm2_5", [])
+
+        # Match the exact target hour string (e.g. "2025-06-12T06:00")
+        target_str = target_dt.strftime("%Y-%m-%dT%H:00")
+        for t, pm in zip(times, pm25s):
+            if t == target_str and pm is not None:
+                aqi = _india_aqi_from_pm25(float(pm))
+                break
+
+    except Exception as exc:
+        log.warning(
+            "get_cams_forecast_aqi(%.2f,%.2f,%s) failed: %s",
+            lat, lon, target_dt.strftime("%Y-%m-%dT%H:00"), exc,
+        )
+
+    _CAMS_ROUTE_CACHE[cache_key] = aqi
+    return aqi

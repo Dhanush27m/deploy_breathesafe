@@ -372,9 +372,11 @@ export default function RoutePlanner() {
     setSelectedRoute('clean')
     try {
       const data = await _fetchRoutes({
-        source_lat:  src.lat, source_lon: src.lon, source_name: src.name || undefined,
-        dest_lat:    dst.lat, dest_lon:   dst.lon, dest_name:   dst.name || undefined,
-        travel_mode: mode,
+        source_lat:    src.lat, source_lon: src.lon, source_name: src.name || undefined,
+        dest_lat:      dst.lat, dest_lon:   dst.lon, dest_name:   dst.name || undefined,
+        travel_mode:   mode,
+        // V3: pass departure time so backend can use ML/CAMS forecast AQI
+        planned_start: travelStart || undefined,
       })
 
       if (data.needs_via_selection) {
@@ -407,12 +409,14 @@ export default function RoutePlanner() {
     setError('')
     try {
       const data = await _fetchRoutes({
-        source_lat:  src.lat, source_lon: src.lon, source_name: src.name || undefined,
-        dest_lat:    dst.lat, dest_lon:   dst.lon, dest_name:   dst.name || undefined,
-        travel_mode: mode,
-        via_lat:     viaOpt.via_lat,
-        via_lon:     viaOpt.via_lon,
-        via_name:    viaOpt.label,
+        source_lat:    src.lat, source_lon: src.lon, source_name: src.name || undefined,
+        dest_lat:      dst.lat, dest_lon:   dst.lon, dest_name:   dst.name || undefined,
+        travel_mode:   mode,
+        via_lat:       viaOpt.via_lat,
+        via_lon:       viaOpt.via_lon,
+        via_name:      viaOpt.label,
+        // V3: preserve departure time through via re-fetch
+        planned_start: travelStart || undefined,
       })
       setViaModal(null)
       setSaved({}); setSaveErr({})
@@ -721,6 +725,30 @@ export default function RoutePlanner() {
               {result.via_label && (
                 <span className="text-xs px-2.5 py-0.5 rounded-full bg-sky-900/30 text-sky-300 border border-sky-700 font-medium">
                   via {result.via_label}
+                </span>
+              )}
+
+              {/* V3: AQI data source badge — Forecast vs Live */}
+              {result.aqi_source === 'forecast' && result.forecast_for ? (
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-900/30 text-emerald-300 border border-emerald-700 font-medium flex items-center gap-1.5">
+                  {/* clock icon */}
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                  Forecast AQI · {new Date(result.forecast_for).toLocaleString('en-IN', {
+                    day:'numeric', month:'short', hour:'2-digit', minute:'2-digit', hour12:true,
+                  })}
+                </span>
+              ) : (
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-gray-800 text-gray-500 border border-gray-700 font-medium flex items-center gap-1.5">
+                  {/* wifi / live icon */}
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="12" cy="19" r="1.5"/>
+                    <path d="M7.5 15.5a6.5 6.5 0 0 1 9 0" stroke="currentColor" fill="none" strokeWidth="2" strokeLinecap="round"/>
+                    <path d="M4 12a11 11 0 0 1 16 0" stroke="currentColor" fill="none" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                  Live AQI
                 </span>
               )}
             </div>

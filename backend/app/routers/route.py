@@ -9,6 +9,7 @@ Endpoints:
 """
 
 import logging
+import time as _time
 from datetime import datetime, timedelta
 from typing import List, Optional
 
@@ -37,6 +38,119 @@ from app.services.route_engine import (
 router = APIRouter()
 
 _bearer = HTTPBearer(auto_error=False)
+
+# ── V3: ML forecast cache ──────────────────────────────────────────────────────
+# {(city_name, date_str, hour): {"aqi": float|None, "ts": float}}
+_ML_CITY_FORECAST_CACHE: dict = {}
+_ML_FORECAST_CACHE_TTL = 3600   # 1 hour — forecasts don't change quickly
+
+
+def _get_city_recent_df(city_name: str, db: Session):
+    """
+    Fetch last 14 days of AQI + weather data for a DB city.
+    Returns a pandas DataFrame with columns: datetime, india_aqi, temperature_c,
+    wind_speed_kmh, humidity_percent, pressure_msl_hpa, wind_gusts_kmh,
+    precipitation_mm, is_raining — or None if no data exists.
+    """
+    import pandas as pd
+
+    cutoff = datetime.utcnow() - timedelta(days=14)
+
+    rows = (
+        db.query(AQIData)
+        .join(MonitoringStation, AQIData.station_id == MonitoringStation.id)
+        .join(City, MonitoringStation.city_id == City.id)
+        .filter(City.name == city_name)
+        .filter(AQIData.datetime >= cutoff)
+        .order_by(AQIData.datetime)
+        .all()
+    )
+
+    if not rows:
+        return None
+
+    records = [{
+        "datetime":          r.datetime,
+        "india_aqi":         float(r.india_aqi) if r.india_aqi is not None else 100.0,
+        "temperature_c":     float(r.temperature_c)    if r.temperature_c    is not None else 20.0,
+        "wind_speed_kmh":    float(r.wind_speed_kmh)   if r.wind_speed_kmh   is not None else  5.0,
+        "humidity_percent":  float(r.humidity_percent) if r.humidity_percent is not None else 60.0,
+        "pressure_msl_hpa":  float(r.pressure_msl_hpa) if r.pressure_msl_hpa is not None else 1013.0,
+        "wind_gusts_kmh":    float(r.wind_gusts_kmh)   if r.wind_gusts_kmh   is not None else  8.0,
+        "precipitation_mm":  float(r.precipitation_mm) if r.precipitation_mm is not None else  0.0,
+        "is_raining":        bool(r.is_raining)         if r.is_raining       is not None else False,
+    } for r in rows]
+
+    df = pd.DataFrame(records)
+    df["datetime"] = pd.to_datetime(df["datetime"])
+    return df
+
+
+def _get_ml_forecast_aqi(city_name: str, target_dt: datetime, db: Session):
+    """
+    Return XGBoost-predicted India AQI for a DB city at a specific future hour.
+
+    Workflow:
+      1. Fetch last 14 days of DB readings for the city.
+      2. Run _xgb_predict_horizon() up to target_dt.
+      3. Return the hourly prediction matching target_dt's date + hour.
+
+    Results cached per (city, date, hour) with a 1-hour TTL so repeated route
+    requests for the same journey don't re-run inference.
+
+    Returns None if:
+      • ML models not trained for this city
+      • target_dt is more than 7 days in the future
+      • Fewer than 24 h of DB history available
+    """
+    from app.ml.predictor import _load_models, _xgb_predict_horizon, models_available
+
+    # Check if within forecastable range (0 min → 7 days ahead)
+    now_ist   = datetime.utcnow() + timedelta(hours=5, minutes=30)
+    tgt_naive = target_dt.replace(tzinfo=None) if getattr(target_dt, "tzinfo", None) else target_dt
+    delta_h   = (tgt_naive - now_ist).total_seconds() / 3600
+
+    if delta_h < 0 or delta_h > 168:
+        return None
+
+    if not models_available(city_name):
+        return None
+
+    date_str  = tgt_naive.strftime("%Y-%m-%d")
+    cache_key = (city_name, date_str, tgt_naive.hour)
+    entry     = _ML_CITY_FORECAST_CACHE.get(cache_key)
+    if entry and (_time.time() - entry["ts"] < _ML_FORECAST_CACHE_TTL):
+        return entry["aqi"]
+
+    try:
+        recent_df = _get_city_recent_df(city_name, db)
+        if recent_df is None or len(recent_df) < 24:
+            return None
+
+        last_dt   = recent_df["datetime"].max()
+        if getattr(last_dt, "tzinfo", None):
+            last_dt = last_dt.replace(tzinfo=None)
+
+        horizon_h = max(1, int((tgt_naive - last_dt).total_seconds() / 3600) + 1)
+        if horizon_h > 168:
+            return None
+
+        models  = _load_models(city_name)
+        hourly  = _xgb_predict_horizon(city_name, models, recent_df, horizon_h)
+
+        aqi = None
+        for pred in hourly:
+            pdt = pred["datetime"]
+            if pdt.date() == tgt_naive.date() and pdt.hour == tgt_naive.hour:
+                aqi = round(float(pred["aqi"]), 1)
+                break
+
+        _ML_CITY_FORECAST_CACHE[cache_key] = {"aqi": aqi, "ts": _time.time()}
+        return aqi
+
+    except Exception as exc:
+        logger.warning("_get_ml_forecast_aqi(%s, %s) failed: %s", city_name, target_dt, exc)
+        return None
 
 
 async def get_optional_user(
@@ -313,6 +427,70 @@ async def score_browser_routes(
     if not city_aqi_map:
         raise HTTPException(status_code=503, detail="No AQI data available.")
 
+    # ── V3: Apply time-aware AQI forecasts when journey is in the future ──────
+    aqi_source    = "live"
+    forecast_for  = None
+    planned_start = payload.planned_start
+
+    if planned_start is not None:
+        now_ist   = datetime.utcnow() + timedelta(hours=5, minutes=30)
+        tgt_naive = (planned_start.replace(tzinfo=None)
+                     if getattr(planned_start, "tzinfo", None) else planned_start)
+        delta_min = (tgt_naive - now_ist).total_seconds() / 60
+
+        if delta_min > 30:
+            # Journey is meaningfully in the future — override AQI with forecasts
+            aqi_source   = "forecast"
+            forecast_for = tgt_naive.isoformat()
+
+            # Collect a representative sample of waypoints from ALL routes
+            # (used to determine which stations are near the route)
+            all_waypoints: list = []
+            for r in payload.osrm_routes:
+                if r.geometry:
+                    wpts = decode_polyline(r.geometry)
+                    # Sample ~30 evenly-spaced points per route for proximity checks
+                    step = max(1, len(wpts) // 30)
+                    all_waypoints.extend(wpts[::step])
+
+            # Collect DB city names for quick lookup
+            db_city_names: set = {c.name for c in db.query(City).all()}
+
+            # Import CAMS function from data_pipeline
+            from app.services.data_pipeline import get_cams_forecast_aqi
+
+            # For each station in the AQI map, check if it's within 150 km of
+            # any route waypoint.  If so, override with forecast AQI.
+            overrides: dict = {}
+            for station_key, (slat, slon, current_aqi) in city_aqi_map.items():
+                near = any(
+                    haversine(slat, slon, wlat, wlon) < 150.0
+                    for wlat, wlon in all_waypoints
+                )
+                if not near:
+                    continue
+
+                if station_key in db_city_names:
+                    # DB city → use XGBoost ML forecast
+                    ml_aqi = _get_ml_forecast_aqi(station_key, tgt_naive, db)
+                    if ml_aqi is not None:
+                        overrides[station_key] = (slat, slon, ml_aqi)
+                        logger.debug(
+                            "V3 ML forecast  city=%-20s  live=%-5.0f  → forecast=%.0f",
+                            station_key, current_aqi, ml_aqi,
+                        )
+                else:
+                    # OpenAQ station → use CAMS forecast
+                    cams_aqi = get_cams_forecast_aqi(slat, slon, tgt_naive)
+                    if cams_aqi is not None:
+                        overrides[station_key] = (slat, slon, cams_aqi)
+
+            city_aqi_map.update(overrides)
+            logger.info(
+                "V3 forecast overrides applied: %d stations overridden for %s",
+                len(overrides), tgt_naive.strftime("%Y-%m-%d %H:%M"),
+            )
+
     travel_mode = payload.travel_mode.value
     source_name = payload.source_name or _nearest_city_name(
         payload.source_lat, payload.source_lon, db)
@@ -340,7 +518,7 @@ async def score_browser_routes(
             p["_via_lon"] = r.via_lon
         processed.append(p)
 
-    return _score_and_build_response(
+    response = _score_and_build_response(
         processed,
         payload.source_lat, payload.source_lon,
         payload.dest_lat,   payload.dest_lon,
@@ -348,6 +526,11 @@ async def score_browser_routes(
         payload.via_name,
         source_name, dest_name, travel_mode,
     )
+
+    # V3: annotate response so the frontend can show "Forecast" vs "Live" label
+    response["aqi_source"]   = aqi_source
+    response["forecast_for"] = forecast_for   # ISO string or None
+    return response
 
 
 # ── 1. Suggest routes ──────────────────────────────────────────────────────────
