@@ -1,20 +1,24 @@
 /**
  * AQIMap — Interactive India map with AQI pin markers
  *
- * V3 — uses plain Leaflet L.layerGroup (no leaflet.markercluster dependency).
- * markercluster's UMD bundle does not reliably extend L in Vite production builds,
- * causing a blank map. Plain layerGroup works identically for ≤30 markers.
+ * V2 props:
+ *   allStations : array of all-India stations from /aqi/india-stations
+ *                 Each: { name, state, latitude, longitude, india_aqi,
+ *                         india_aqi_category, station_name, stale, source }
+ *   cities      : legacy fallback — 29 DB city rankings from /aqi/rankings
+ *                 (used when allStations is not provided)
+ *   onSelect    : optional callback(station) when a pin is clicked
  *
- * Props:
- *   allStations : array from /aqi/india-stations
- *                 { name, state, latitude, longitude, india_aqi,
- *                   india_aqi_category, station_name, stale, source }
- *   cities      : fallback — 29 DB city rankings from /aqi/rankings
- *   onSelect    : optional callback(station)
+ * Features:
+ *   • Leaflet.markercluster for smooth performance with 200+ stations
+ *   • Grey markers for stale data (>3 h since last reading)
+ *   • Popup shows station name, state, AQI, PM2.5, staleness warning
  */
 
 import { useEffect, useRef, useState } from 'react'
 import 'leaflet/dist/leaflet.css'
+import 'leaflet.markercluster/dist/MarkerCluster.css'
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 
 // ── AQI category colours ──────────────────────────────────────────────────────
 const AQI_COLOUR = {
@@ -105,20 +109,22 @@ function normalise(s) {
 }
 
 export default function AQIMap({ allStations, cities = [], onSelect }) {
-  const containerRef = useRef(null)
-  const mapRef       = useRef(null)
-  const layerRef     = useRef(null)      // holds the current L.layerGroup
+  const containerRef   = useRef(null)
+  const mapRef         = useRef(null)
+  const clusterRef     = useRef(null)
   const [mapReady, setMapReady] = useState(false)
 
-  // Prefer allStations (V2/V3); fall back to legacy cities prop
+  // Prefer allStations (V2); fall back to legacy cities prop
   const stations = (allStations && allStations.length > 0) ? allStations : cities
 
   // ── Init map once ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
 
-    // Only import leaflet — no markercluster (UMD incompatibility with Vite prod)
-    import('leaflet').then(({ default: L }) => {
+    Promise.all([
+      import('leaflet'),
+      import('leaflet.markercluster'),
+    ]).then(([{ default: L }]) => {
       if (!containerRef.current || mapRef.current) return
 
       fixLeafletIcons(L)
@@ -144,15 +150,13 @@ export default function AQIMap({ allStations, cities = [], onSelect }) {
 
       mapRef.current = map
       setMapReady(true)
-    }).catch(err => {
-      console.error('[AQIMap] Leaflet init failed:', err)
     })
 
     return () => {
       if (mapRef.current) {
         mapRef.current.remove()
         mapRef.current  = null
-        layerRef.current = null
+        clusterRef.current = null
       }
     }
   }, [])
@@ -161,18 +165,49 @@ export default function AQIMap({ allStations, cities = [], onSelect }) {
   useEffect(() => {
     if (!mapReady || !mapRef.current || !stations.length) return
 
-    import('leaflet').then(({ default: L }) => {
+    Promise.all([
+      import('leaflet'),
+      import('leaflet.markercluster'),
+    ]).then(([{ default: L }]) => {
       const map = mapRef.current
       if (!map) return
 
-      // Remove previous layer group
-      if (layerRef.current) {
-        map.removeLayer(layerRef.current)
-        layerRef.current = null
+      // Remove previous cluster group
+      if (clusterRef.current) {
+        map.removeLayer(clusterRef.current)
+        clusterRef.current = null
       }
 
-      // Create a fresh layer group for all markers
-      const group = L.layerGroup()
+      // Create a fresh cluster group
+      const clusterGroup = L.markerClusterGroup({
+        maxClusterRadius: 40,
+        spiderfyOnMaxZoom: true,
+        showCoverageOnHover: false,
+        zoomToBoundsOnClick: true,
+        iconCreateFunction: (cluster) => {
+          const count = cluster.getChildCount()
+          const size  = count < 10 ? 32 : count < 50 ? 40 : 48
+          return L.divIcon({
+            html: `<div style="
+              background: rgba(14,165,233,0.85);
+              border: 2px solid #0369a1;
+              border-radius: 50%;
+              width: ${size}px;
+              height: ${size}px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 12px;
+              font-weight: 700;
+              color: #fff;
+              font-family: -apple-system, sans-serif;
+              box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            ">${count}</div>`,
+            className: '',
+            iconSize:  [size, size],
+          })
+        },
+      })
 
       stations.forEach(raw => {
         const s = normalise(raw)
@@ -222,13 +257,11 @@ export default function AQIMap({ allStations, cities = [], onSelect }) {
           marker.on('click', () => onSelect(raw))
         }
 
-        group.addLayer(marker)
+        clusterGroup.addLayer(marker)
       })
 
-      group.addTo(map)
-      layerRef.current = group
-    }).catch(err => {
-      console.error('[AQIMap] Marker update failed:', err)
+      map.addLayer(clusterGroup)
+      clusterRef.current = clusterGroup
     })
   }, [stations, onSelect, mapReady])
 
@@ -253,6 +286,10 @@ export default function AQIMap({ allStations, cities = [], onSelect }) {
           font-size: 16px !important;
           top: 6px !important;
           right: 8px !important;
+        }
+        .leaflet-cluster-anim .leaflet-marker-icon,
+        .leaflet-cluster-anim .leaflet-marker-shadow {
+          transition: transform 0.3s ease-out, opacity 0.3s ease-in;
         }
       `}</style>
       <div style={{ isolation: 'isolate', position: 'relative' }}>

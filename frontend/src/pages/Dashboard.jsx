@@ -45,7 +45,7 @@ export default function Dashboard() {
   const [stats,          setStats]          = useState(null)
   const [allStations,    setAllStations]    = useState([])
   const [homeState,      setHomeState]      = useState(null)   // derived from profile home_city
-  const [showAllStates,  setShowAllStates]  = useState(true)   // default: show all 29 cities
+  const [showAllStates,  setShowAllStates]  = useState(false)  // user toggled "show all"
   const [loading,        setLoading]        = useState(true)
   const [search,         setSearch]         = useState('')
   const [showDropdown,   setShowDropdown]   = useState(false)
@@ -353,15 +353,12 @@ export default function Dashboard() {
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-800 bg-gray-800/30">
             <div className="text-xs text-gray-400">
               {showAllStates
-                ? <span>
-                    Showing all <span className="text-white font-semibold">{rankings.length}</span> monitored cities
-                    <span className="text-gray-600 ml-1">
-                      · your home state: <span className="text-sky-400 capitalize">{homeState}</span>
-                    </span>
-                  </span>
+                ? <span>Showing all monitored cities</span>
                 : <span>
-                    Filtered to <span className="text-sky-300 font-semibold capitalize">{homeState}</span>
-                    <span className="text-gray-500"> ({tableRows.length} of {rankings.length} cities)</span>
+                    Showing <span className="text-sky-300 font-semibold capitalize">{homeState}</span> cities
+                    {tableRows.length < rankings.length && (
+                      <span className="text-gray-500"> ({tableRows.length} of {rankings.length})</span>
+                    )}
                   </span>
               }
             </div>
@@ -369,7 +366,7 @@ export default function Dashboard() {
               onClick={() => setShowAllStates(v => !v)}
               className="text-xs text-sky-400 hover:text-sky-300 font-medium transition-colors"
             >
-              {showAllStates ? 'Filter to my state →' : '← Show all cities'}
+              {showAllStates ? '← Show my state only' : 'Show all cities →'}
             </button>
           </div>
         )}
