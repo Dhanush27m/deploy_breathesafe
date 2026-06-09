@@ -1,13 +1,9 @@
 /**
  * RouteMap — Leaflet map for the Route Planner
  *
- * V2: Shows ALL routes simultaneously as colored polylines.
- * The selected route is highlighted (thicker + full opacity);
- * others are drawn dimmed for visual comparison.
- *
  * Props:
  *   routes        : array of route objects (each has route_type, waypoints, distance_km, time_min, avg_aqi_exposure)
- *   selectedType  : "fastest" | "clean" | "balanced" — which route is highlighted
+ *   selectedType  : "fastest" | "clean" | "balanced"
  *   sourceLat/Lon : coordinates for the origin marker
  *   destLat/Lon   : coordinates for the destination marker
  *   sourceName    : label for origin marker
@@ -17,13 +13,14 @@
 import { useEffect, useRef } from 'react'
 import 'leaflet/dist/leaflet.css'
 
-// Per-type polyline style — selected (highlighted) vs dimmed
+// Leaflet colours per route type
 const ROUTE_STYLE = {
-  fastest:  { color: '#38bdf8', selectedWeight: 6, dimWeight: 3, selectedOpacity: 1.0, dimOpacity: 0.35 },
-  clean:    { color: '#4ade80', selectedWeight: 6, dimWeight: 3, selectedOpacity: 1.0, dimOpacity: 0.35 },
-  balanced: { color: '#c084fc', selectedWeight: 6, dimWeight: 3, selectedOpacity: 1.0, dimOpacity: 0.35 },
+  fastest:  { color: '#38bdf8', weight: 5, opacity: 0.95 },   // sky-400
+  clean:    { color: '#4ade80', weight: 5, opacity: 0.95 },   // green-400
+  balanced: { color: '#c084fc', weight: 5, opacity: 0.95 },   // purple-400
 }
 
+// Fix Leaflet default marker icon paths broken by bundlers
 function fixLeafletIcons(L) {
   delete L.Icon.Default.prototype._getIconUrl
   L.Icon.Default.mergeOptions({
@@ -33,6 +30,7 @@ function fixLeafletIcons(L) {
   })
 }
 
+// Coloured circle div-icon for source / destination
 function makeCircleIcon(L, colour, label) {
   return L.divIcon({
     className: '',
@@ -58,26 +56,22 @@ export default function RouteMap({
   sourceLat, sourceLon, sourceName = 'Start',
   destLat,   destLon,   destName   = 'End',
 }) {
-  const containerRef  = useRef(null)
-  const mapRef        = useRef(null)
-  const polylinesRef  = useRef({})    // { route_type: polyline }
-  const markersRef    = useRef([])
-  const [mapReady, _setMapReady] = [useRef(false), (v) => { mapReady.current = v }]
-  const mapReadyRef   = useRef(false)
-  const setMapReady   = (v) => { mapReadyRef.current = v }
+  const containerRef = useRef(null)
+  const mapRef       = useRef(null)
+  const polylineRef  = useRef(null)
+  const markersRef   = useRef([])
 
   // ── Initialise map once ────────────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
 
     import('leaflet').then(({ default: L }) => {
-      if (!containerRef.current || mapRef.current) return
       fixLeafletIcons(L)
 
       const map = L.map(containerRef.current, {
-        zoomControl:        true,
+        zoomControl:       true,
         attributionControl: true,
-        scrollWheelZoom:    true,
+        scrollWheelZoom:   true,
       })
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -86,104 +80,75 @@ export default function RouteMap({
       }).addTo(map)
 
       mapRef.current = map
-      setMapReady(true)
     })
 
     return () => {
       if (mapRef.current) {
         mapRef.current.remove()
-        mapRef.current    = null
-        polylinesRef.current = {}
-        markersRef.current   = []
-        setMapReady(false)
+        mapRef.current  = null
+        polylineRef.current = null
+        markersRef.current  = []
       }
     }
   }, [])
 
-  // ── Redraw all polylines + markers when routes or selectedType changes ─────
+  // ── Update polyline + markers when selected route changes ─────────────────
   useEffect(() => {
     if (!mapRef.current || !routes.length) return
 
     import('leaflet').then(({ default: L }) => {
       const map = mapRef.current
-      if (!map) return
 
-      // Remove old polylines
-      Object.values(polylinesRef.current).forEach(pl => map.removeLayer(pl))
-      polylinesRef.current = {}
-
+      // Remove old polyline
+      if (polylineRef.current) {
+        map.removeLayer(polylineRef.current)
+        polylineRef.current = null
+      }
       // Remove old markers
       markersRef.current.forEach(m => map.removeLayer(m))
       markersRef.current = []
 
-      let allBoundsPoints = []
+      // Find the selected route
+      const route = routes.find(r => r.route_type === selectedType) || routes[0]
+      if (!route?.waypoints?.length) return
 
-      // ── Draw ALL routes, dimmed first, selected last (on top) ─────────────
-      const sortedRoutes = [
-        ...routes.filter(r => r.route_type !== selectedType),
-        ...routes.filter(r => r.route_type === selectedType),
-      ]
+      const style = ROUTE_STYLE[route.route_type] || ROUTE_STYLE.fastest
 
-      sortedRoutes.forEach(route => {
-        if (!route?.waypoints?.length) return
+      // Draw polyline
+      const polyline = L.polyline(route.waypoints, style).addTo(map)
+      polylineRef.current = polyline
 
-        const style   = ROUTE_STYLE[route.route_type] || ROUTE_STYLE.fastest
-        const isSelected = route.route_type === selectedType
-
-        const polyline = L.polyline(route.waypoints, {
-          color:   style.color,
-          weight:  isSelected ? style.selectedWeight : style.dimWeight,
-          opacity: isSelected ? style.selectedOpacity : style.dimOpacity,
-        }).addTo(map)
-
-        // Tooltip on hover (all routes)
-        polyline.bindTooltip(
-          `<b style="color:${style.color}">${route.route_type.charAt(0).toUpperCase() + route.route_type.slice(1)}</b>` +
-          ` — ${route.distance_km?.toFixed(1)} km · ${route.time_min?.toFixed(0)} min` +
-          ` · AQI ${Math.round(route.avg_aqi_exposure ?? 0)}`,
-          { sticky: true, opacity: 0.9 }
-        )
-
-        polylinesRef.current[route.route_type] = polyline
-
-        if (isSelected) {
-          allBoundsPoints = route.waypoints
-        } else if (!allBoundsPoints.length) {
-          allBoundsPoints = route.waypoints
-        }
-      })
-
-      // ── Source / destination markers ──────────────────────────────────────
+      // Source marker (sky blue)
       if (sourceLat != null && sourceLon != null) {
         const srcMarker = L.marker([sourceLat, sourceLon], {
           icon: makeCircleIcon(L, '#0ea5e9', 'A'),
-          zIndexOffset: 1000,
         })
           .addTo(map)
           .bindPopup(`<b>${sourceName}</b><br/>Origin`)
         markersRef.current.push(srcMarker)
       }
 
+      // Destination marker (green)
       if (destLat != null && destLon != null) {
         const dstMarker = L.marker([destLat, destLon], {
           icon: makeCircleIcon(L, '#22c55e', 'B'),
-          zIndexOffset: 1000,
         })
           .addTo(map)
           .bindPopup(`<b>${destName}</b><br/>Destination`)
         markersRef.current.push(dstMarker)
       }
 
-      // ── Fit map to the selected (or first available) route bounds ─────────
-      if (allBoundsPoints.length) {
-        const bounds = L.latLngBounds(allBoundsPoints)
-        if (bounds.isValid()) {
-          map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 })
-        }
+      // Fit map to route bounds with padding
+      const bounds = polyline.getBounds()
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 })
       }
     })
   }, [routes, selectedType, sourceLat, sourceLon, destLat, destLon, sourceName, destName])
 
+  // Stacking context wrapper: keeps Leaflet's internal z-indices (200–600)
+  // below the sticky navbar (z-50). Without this, Leaflet pane z-indices win
+  // against the global stacking context and tiles overflow the nav on scroll.
   return (
     <div style={{ position: 'relative', zIndex: 0 }}>
       <div

@@ -2,7 +2,6 @@ import { useEffect, useState, useRef, lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../services/api'
 import AQIBadge from '../components/AQIBadge'
-import { useAuth } from '../context/AuthContext'
 import { IconSearch, IconChevronRight, IconMapPin } from '../components/Icons'
 
 const AQIMap = lazy(() => import('../components/AQIMap'))
@@ -25,6 +24,7 @@ function Spinner() {
   )
 }
 
+// Highlight the matched substring in a string
 function Highlight({ text, query }) {
   if (!query) return <>{text}</>
   const idx = text.toLowerCase().indexOf(query.toLowerCase())
@@ -39,63 +39,25 @@ function Highlight({ text, query }) {
 }
 
 export default function Dashboard() {
-  const { user }  = useAuth()
-
-  const [rankings,       setRankings]       = useState([])
-  const [stats,          setStats]          = useState(null)
-  const [allStations,    setAllStations]    = useState([])
-  const [homeState,      setHomeState]      = useState(null)   // derived from profile home_city
-  const [showAllStates,  setShowAllStates]  = useState(false)  // user toggled "show all"
-  const [loading,        setLoading]        = useState(true)
-  const [search,         setSearch]         = useState('')
-  const [showDropdown,   setShowDropdown]   = useState(false)
-  const [activeIdx,      setActiveIdx]      = useState(-1)
-  const [selectedCity,   setSelectedCity]   = useState(null)
-  const [stationsCount,  setStationsCount]  = useState(0)
-
-  const searchRef   = useRef(null)
+  const [rankings,      setRankings]      = useState([])
+  const [stats,         setStats]         = useState(null)
+  const [loading,       setLoading]       = useState(true)
+  const [search,        setSearch]        = useState('')
+  const [showDropdown,  setShowDropdown]  = useState(false)
+  const [activeIdx,     setActiveIdx]     = useState(-1)   // keyboard nav
+  const [selectedCity,  setSelectedCity]  = useState(null)
+  const searchRef = useRef(null)
   const dropdownRef = useRef(null)
 
-  // ── Load data on mount ────────────────────────────────────────────────────
   useEffect(() => {
-    const base = Promise.all([
+    Promise.all([
       api.get('/aqi/rankings?order=desc'),
       api.get('/aqi/stats'),
-    ])
-
-    // Load all-India stations in parallel (for map); don't block table render
-    const stationsReq = api.get('/aqi/india-stations').catch(() => ({ data: [] }))
-
-    // Load user profile if logged in (for home state filter)
-    const profileReq = user
-      ? api.get('/profile/').catch(() => ({ data: null }))
-      : Promise.resolve({ data: null })
-
-    base.then(([r, s]) => {
-      const rankData = r.data
-      setRankings(rankData)
+    ]).then(([r, s]) => {
+      setRankings(r.data)
       setStats(s.data)
-      setLoading(false)
-
-      // Once rankings are loaded, resolve home_city → home state
-      profileReq.then(p => {
-        const homeCity = p.data?.home_city
-        if (homeCity) {
-          const match = rankData.find(
-            c => c.city.toLowerCase() === homeCity.toLowerCase()
-          )
-          if (match) setHomeState(match.state)
-        }
-      })
-    }).catch(() => setLoading(false))
-
-    stationsReq.then(r => {
-      if (r.data && r.data.length > 0) {
-        setAllStations(r.data)
-        setStationsCount(r.data.length)
-      }
-    })
-  }, [user])
+    }).finally(() => setLoading(false))
+  }, [])
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -109,31 +71,17 @@ export default function Dashboard() {
     return () => document.removeEventListener('mousedown', onOutside)
   }, [])
 
-  // ── Table filtering logic ─────────────────────────────────────────────────
-  // When user is logged in and has a home state, default to showing only
-  // home state rows. A search term overrides this to search all 29 cities.
-  const isFiltered = search.trim().length > 0
-
-  const tableRows = rankings.filter(c => {
-    if (isFiltered) {
-      return (
-        c.city.toLowerCase().includes(search.toLowerCase()) ||
-        c.state.toLowerCase().includes(search.toLowerCase())
-      )
-    }
-    // Not searching → apply home state filter only if we know the state
-    // and the user hasn't clicked "show all"
-    if (homeState && !showAllStates) {
-      return c.state.toLowerCase() === homeState.toLowerCase()
-    }
-    return true
-  })
-
-  // Autocomplete suggestions always search across all 29 cities
+  // Suggestions: cities/states matching current search (max 8)
   const suggestions = search.trim().length === 0 ? [] : rankings.filter(c =>
     c.city.toLowerCase().includes(search.toLowerCase()) ||
     c.state.toLowerCase().includes(search.toLowerCase())
   ).slice(0, 8)
+
+  // Table filter: exact same logic, but uses full list when dropdown closed
+  const filtered = rankings.filter(c =>
+    c.city.toLowerCase().includes(search.toLowerCase()) ||
+    c.state.toLowerCase().includes(search.toLowerCase())
+  )
 
   const pickCity = (c) => {
     setSearch(c.city)
@@ -164,20 +112,15 @@ export default function Dashboard() {
 
   if (loading) return <Spinner />
 
-  const best  = [...rankings].sort((a, b) => (a.india_aqi || 0) - (b.india_aqi || 0))[0]
+  const best  = [...rankings].sort((a, b) => (a.india_aqi||0) - (b.india_aqi||0))[0]
   const worst = rankings[0]
-  const mapStationCount = allStations.length || rankings.length
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white">AQI Dashboard</h1>
-          <p className="text-gray-400 text-sm">
-            {mapStationCount > 29
-              ? `${mapStationCount} CPCB stations on map · 29 monitored cities in table`
-              : 'Latest readings for 29 monitored cities'}
-          </p>
+          <p className="text-gray-400 text-sm">Latest readings for 29 monitored cities</p>
         </div>
 
         {/* Search with autocomplete */}
@@ -191,8 +134,6 @@ export default function Dashboard() {
               setSearch(e.target.value)
               setShowDropdown(true)
               setActiveIdx(-1)
-              // Searching always shows all cities
-              if (e.target.value) setShowAllStates(false)
             }}
             onFocus={() => { if (search.trim()) setShowDropdown(true) }}
             onKeyDown={handleKeyDown}
@@ -242,6 +183,7 @@ export default function Dashboard() {
             </div>
           )}
 
+          {/* No results hint */}
           {showDropdown && search.trim().length > 0 && suggestions.length === 0 && (
             <div className="absolute z-50 top-full mt-1 w-full bg-gray-900 border border-gray-700 rounded-xl shadow-xl px-4 py-3 text-sm text-gray-500">
               No city or state matches "{search}"
@@ -269,13 +211,12 @@ export default function Dashboard() {
 
       {/* ── Live AQI Map ─────────────────────────────────────────────────────── */}
       <div className="card p-0 overflow-hidden border border-gray-700">
+        {/* Map header */}
         <div className="flex items-center justify-between px-4 py-3 bg-gray-800/80 border-b border-gray-700">
           <div className="flex items-center gap-2">
             <IconMapPin size={15} className="text-sky-400" />
             <span className="text-white text-sm font-semibold">Live AQI Map — India</span>
-            <span className="text-gray-500 text-xs ml-1">
-              · {mapStationCount > 29 ? `${mapStationCount} CPCB stations` : `${rankings.length} cities`}
-            </span>
+            <span className="text-gray-500 text-xs ml-1">· {rankings.length} cities</span>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {[
@@ -293,49 +234,37 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Leaflet map */}
         <Suspense fallback={
           <div className="flex items-center justify-center bg-gray-900" style={{ height: '460px' }}>
             <div className="w-8 h-8 border-4 border-sky-500 border-t-transparent rounded-full animate-spin" />
           </div>
         }>
-          <AQIMap
-            allStations={allStations.length > 0 ? allStations : undefined}
-            cities={rankings}
-            onSelect={c => {
-              // Handle click from both allStations (name field) and rankings (city field)
-              const cityName = c.city || c.name || ''
-              const match = rankings.find(r => r.city.toLowerCase() === cityName.toLowerCase())
-              if (match) pickCity(match)
-              else setSelectedCity(c)
-            }}
-          />
+          <AQIMap cities={rankings} onSelect={pickCity} />
         </Suspense>
 
+        {/* Selected city quick-info bar */}
         {selectedCity && (
           <div className="flex items-center justify-between px-4 py-2.5 bg-gray-800/60 border-t border-gray-700 text-sm flex-wrap gap-2">
             <div className="flex items-center gap-2 text-white font-semibold capitalize">
               <IconMapPin size={13} className="text-sky-400" />
-              {selectedCity.city || selectedCity.station_name || selectedCity.name}
-              <span className="text-gray-400 font-normal text-xs capitalize">
-                · {selectedCity.state}
-              </span>
+              {selectedCity.city}
+              <span className="text-gray-400 font-normal text-xs capitalize">· {selectedCity.state}</span>
             </div>
             <div className="flex items-center gap-3 text-xs text-gray-300">
               <span>AQI <span className="font-bold text-white">{Math.round(selectedCity.india_aqi ?? 0)}</span></span>
               {selectedCity.pm2_5_ugm3 != null && (
-                <span>PM2.5 <span className="font-bold text-white">{Number(selectedCity.pm2_5_ugm3).toFixed(1)} µg/m³</span></span>
+                <span>PM2.5 <span className="font-bold text-white">{selectedCity.pm2_5_ugm3.toFixed(1)} µg/m³</span></span>
               )}
               <AQIBadge category={selectedCity.india_aqi_category} />
-              <button
-                onClick={() => { setSelectedCity(null); setSearch('') }}
-                className="text-gray-500 hover:text-gray-300 text-xs ml-2"
-              >✕ Clear</button>
+              <button onClick={() => { setSelectedCity(null); setSearch('') }}
+                className="text-gray-500 hover:text-gray-300 text-xs ml-2">✕ Clear</button>
             </div>
           </div>
         )}
       </div>
 
-      {/* ── AQI scale ──────────────────────────────────────────────────────── */}
+      {/* AQI scale + search row */}
       <div className="flex flex-wrap gap-2 items-center justify-between">
         <div className="flex flex-wrap gap-2 items-center">
           <span className="text-gray-500 text-xs mr-1">AQI Scale:</span>
@@ -346,31 +275,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Cities Table ─────────────────────────────────────────────────── */}
       <div className="card overflow-x-auto p-0">
-        {/* Table header with state filter info */}
-        {homeState && !isFiltered && (
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-800 bg-gray-800/30">
-            <div className="text-xs text-gray-400">
-              {showAllStates
-                ? <span>Showing all monitored cities</span>
-                : <span>
-                    Showing <span className="text-sky-300 font-semibold capitalize">{homeState}</span> cities
-                    {tableRows.length < rankings.length && (
-                      <span className="text-gray-500"> ({tableRows.length} of {rankings.length})</span>
-                    )}
-                  </span>
-              }
-            </div>
-            <button
-              onClick={() => setShowAllStates(v => !v)}
-              className="text-xs text-sky-400 hover:text-sky-300 font-medium transition-colors"
-            >
-              {showAllStates ? '← Show my state only' : 'Show all cities →'}
-            </button>
-          </div>
-        )}
-
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-800 text-gray-400 text-xs uppercase">
@@ -380,18 +285,16 @@ export default function Dashboard() {
             </tr>
           </thead>
           <tbody>
-            {tableRows.map(c => (
+            {filtered.map(c => (
               <tr
                 key={c.city}
                 id={`city-row-${c.city}`}
-                className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors ${
-                  selectedCity?.city === c.city ? 'bg-sky-900/20' : ''
-                }`}
+                className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors ${selectedCity?.city === c.city ? 'bg-sky-900/20' : ''}`}
               >
                 <td className="px-4 py-3 text-gray-500 font-mono">{c.rank}</td>
                 <td className="px-4 py-3 font-semibold text-white capitalize">{c.city}</td>
                 <td className="px-4 py-3 text-gray-400 capitalize">{c.state}</td>
-                <td className="px-4 py-3 font-bold text-white">{Math.round(c.india_aqi ?? 0)}</td>
+                <td className="px-4 py-3 font-bold text-white">{Math.round(c.india_aqi??0)}</td>
                 <td className="px-4 py-3"><AQIBadge category={c.india_aqi_category} /></td>
                 <td className="px-4 py-3 text-gray-300">{c.pm2_5_ugm3?.toFixed(1) ?? '—'}</td>
                 <td className="px-4 py-3 text-gray-300">{c.temperature_c ? `${c.temperature_c.toFixed(1)}°` : '—'}</td>
@@ -404,13 +307,7 @@ export default function Dashboard() {
             ))}
           </tbody>
         </table>
-        {tableRows.length === 0 && (
-          <p className="text-center text-gray-500 py-8">
-            {isFiltered
-              ? `No cities match "${search}"`
-              : 'No cities found.'}
-          </p>
-        )}
+        {filtered.length === 0 && <p className="text-center text-gray-500 py-8">No cities match.</p>}
       </div>
     </div>
   )

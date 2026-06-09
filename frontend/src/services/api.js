@@ -1,9 +1,7 @@
 import axios from 'axios'
 
 const api = axios.create({
-  // Production: Render backend URL
-  // Local dev:  set VITE_API_URL=http://localhost:8000 in frontend/.env
-  baseURL: import.meta.env.VITE_API_URL || 'https://deploy-breathesafe-backend.onrender.com',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
   timeout: 30000,   // 30 s — handles Render cold-start latency
   headers: { 'Content-Type': 'application/json' },
 })

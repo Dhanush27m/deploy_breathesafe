@@ -57,25 +57,18 @@ class RouteScoreRequest(BaseModel):
     backend scores AQI exposure and returns fastest/clean/balanced cards.
     Accepts the same optional via_* fields as RouteRequest so the via-picker
     flow works identically.
-
-    V3: planned_start — if the journey is in the future (>30 min from now),
-    AQI values are overridden with time-aware forecasts:
-      • DB cities (29): XGBoost ML model predicts AQI at departure hour
-      • OpenAQ stations: CAMS (Copernicus) forecast for that lat/lon/hour
-    If None or within 30 minutes, current live AQI is used instead.
     """
-    source_lat:    float = Field(..., ge=-90,  le=90)
-    source_lon:    float = Field(..., ge=-180, le=180)
-    source_name:   Optional[str] = None
-    dest_lat:      float = Field(..., ge=-90,  le=90)
-    dest_lon:      float = Field(..., ge=-180, le=180)
-    dest_name:     Optional[str] = None
-    travel_mode:   TravelModeEnum = TravelModeEnum.driving
-    osrm_routes:   List[OsrmRouteInput]
-    via_lat:       Optional[float] = Field(None, ge=-90,  le=90)
-    via_lon:       Optional[float] = Field(None, ge=-180, le=180)
-    via_name:      Optional[str] = None
-    planned_start: Optional[datetime] = None   # V3: departure datetime for forecast AQI
+    source_lat:   float = Field(..., ge=-90,  le=90)
+    source_lon:   float = Field(..., ge=-180, le=180)
+    source_name:  Optional[str] = None
+    dest_lat:     float = Field(..., ge=-90,  le=90)
+    dest_lon:     float = Field(..., ge=-180, le=180)
+    dest_name:    Optional[str] = None
+    travel_mode:  TravelModeEnum = TravelModeEnum.driving
+    osrm_routes:  List[OsrmRouteInput]
+    via_lat:      Optional[float] = Field(None, ge=-90,  le=90)
+    via_lon:      Optional[float] = Field(None, ge=-180, le=180)
+    via_name:     Optional[str] = None
 
 
 class RouteSaveRequest(BaseModel):
