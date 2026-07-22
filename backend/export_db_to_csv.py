@@ -8,8 +8,9 @@ Usage (run inside the backend container):
     docker exec breathesafe_backend python /app/export_db_to_csv.py
 """
 
-import os, sys, logging
-from datetime import datetime
+import logging
+import os
+import sys
 from pathlib import Path
 
 sys.path.insert(0, "/app")
@@ -20,6 +21,7 @@ if not os.environ.get("DATABASE_URL"):
     sys.exit(1)
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO,
@@ -139,7 +141,7 @@ def main():
     new_df.to_csv(append_path, index=False, header=False)
 
     print(f"\n  Written {len(new_df):,} new rows (no header) to: {append_path}")
-    print(f"\n  *** NEXT STEP — run in PowerShell ***")
+    print("\n  *** NEXT STEP — run in PowerShell ***")
     print(r"  $d = 'C:\Users\<your-username>\path\to\breathesafe\data'")
     print(r"  Get-Content $d\aqi_rows_to_append.csv | Add-Content $d\aqi_india_enriched.csv")
     print(r"  Remove-Item $d\aqi_rows_to_append.csv")

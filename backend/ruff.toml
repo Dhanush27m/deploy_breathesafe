@@ -1,0 +1,11 @@
+target-version = "py311"
+line-length = 120
+exclude = ["alembic/versions"]
+
+[lint]
+# E/W = pycodestyle, F = pyflakes (real bugs), I = import sorting
+select = ["E", "W", "F", "I"]
+# Matches existing codebase style:
+# E701 one-liner `if x: y` used throughout; E402 scripts call load_dotenv() before app imports;
+# E711/E712 SQLAlchemy filters require `== None` / `== True`
+ignore = ["E701", "E402", "E711", "E712"]

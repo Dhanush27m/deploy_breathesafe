@@ -11,16 +11,16 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, desc
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models.city import City
 from app.models.aqi_data import AQIData
+from app.models.city import City
 from app.models.health_profile import HealthProfile
 from app.models.monitoring_station import MonitoringStation
-from app.models.risk_log import RiskLog, RiskCategoryEnum
+from app.models.risk_log import RiskCategoryEnum, RiskLog
 from app.models.user import User
 from app.schemas.risk import RiskCalculateRequest
 from app.services.paeri import calculate_paeri
@@ -177,17 +177,17 @@ def risk_history(
 
     records = [
         {
-            "id":            l.id,
-            "risk_score":    l.risk_score,
-            "risk_category": l.risk_category,
-            "aqi_used":      l.aqi_used,
-            "city":          l.city.name if l.city else None,
-            "activity_level":l.activity_level,
-            "exposure_hours":l.exposure_hours,
-            "timestamp":     l.timestamp,
-            "explanation":   l.explanation,
+            "id":            log.id,
+            "risk_score":    log.risk_score,
+            "risk_category": log.risk_category,
+            "aqi_used":      log.aqi_used,
+            "city":          log.city.name if log.city else None,
+            "activity_level":log.activity_level,
+            "exposure_hours":log.exposure_hours,
+            "timestamp":     log.timestamp,
+            "explanation":   log.explanation,
         }
-        for l in logs
+        for log in logs
     ]
 
     return {
@@ -203,7 +203,7 @@ def risk_history(
 def cities_risk_snapshot(
     age:              int   = Query(30,      ge=1,  le=100),
     exposure_hours:   float = Query(2.0,     ge=0,  le=24),
-    activity_level:   str   = Query("light", regex="^(resting|light|moderate|intense)$"),
+    activity_level:   str   = Query("light", pattern="^(resting|light|moderate|intense)$"),
     respiratory:      bool  = Query(False),
     heart_disease:    bool  = Query(False),
     db: Session = Depends(get_db),

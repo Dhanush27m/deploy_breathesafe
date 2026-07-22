@@ -89,3 +89,8 @@ htmlcov/
 
 # ── Local dev scratch files ───────────────────────────────────────────────────
 test_write_check.txt
+
+# ── Claude Code personal config (private, per-developer) ─────────────────────
+CLAUDE.local.md
+.claude/settings.local.json
+.claude/WORKLOG.md

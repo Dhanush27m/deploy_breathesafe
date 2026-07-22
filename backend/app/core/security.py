@@ -23,8 +23,17 @@ def hash_password(plain: str) -> str:
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    """Return True if plain matches the stored bcrypt hash."""
-    return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    """
+    Return True if plain matches the stored bcrypt hash.
+
+    bcrypt raises ValueError on inputs over 72 bytes and on malformed hashes;
+    a failed comparison is an authentication failure, not a server error, so
+    those surface as False rather than propagating into a 500.
+    """
+    try:
+        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except (ValueError, TypeError):
+        return False
 
 
 # ── JWT helpers ────────────────────────────────────────────────────────────────

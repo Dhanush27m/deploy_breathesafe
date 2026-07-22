@@ -21,17 +21,22 @@ Usage (run inside the backend container):
     docker exec breathesafe_backend python /app/fetch_gap_data.py
 """
 
-import os, sys, time, math, json, logging
+import json
+import logging
+import math
+import os
+import sys
+import time
 from datetime import date, datetime
-from urllib.request import urlopen, Request
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.error import URLError, HTTPError
+from urllib.request import Request, urlopen
 
-import pandas as pd
 import numpy as np
+import pandas as pd
+from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -259,7 +264,9 @@ def discover_india_stations() -> dict:
                 "dist_km":  round(best_dist, 1),
                 "sensors":  param_map,
             }
-            log.info(f"  {city:20s} -> {best_loc.get('name','')} ({best_dist:.1f} km) | params: {list(param_map.keys())}")
+            log.info(
+                f"  {city:20s} -> {best_loc.get('name','')} ({best_dist:.1f} km) | params: {list(param_map.keys())}"
+            )
         else:
             log.warning(f"  {city}: station found but no matching sensors")
 
@@ -491,7 +498,7 @@ def main():
         source_tag = "CAMS"
 
         if city in city_sensors:
-            log.info(f"  Pollutants: fetching from OpenAQ (measured data)")
+            log.info("  Pollutants: fetching from OpenAQ (measured data)")
             try:
                 df_aq = fetch_openaq_pollutants(city, city_sensors[city]["sensors"])
                 if len(df_aq) > 100:
@@ -506,7 +513,7 @@ def main():
                 df_aq = pd.DataFrame()
 
         if df_aq.empty:
-            log.info(f"  Pollutants: fetching from Open-Meteo CAMS (model-based)")
+            log.info("  Pollutants: fetching from Open-Meteo CAMS (model-based)")
             try:
                 df_aq = fetch_cams_airquality(lat, lon)
                 cams_cities.append(city)
@@ -564,7 +571,7 @@ def main():
     log.info(f"  CSV: {len(existing_df):,} existing + {len(new_df):,} new = {len(combined_df):,} total rows")
 
     # ── Phase 5: Insert into PostgreSQL ──────────────────────────────────────
-    log.info(f"\nPHASE 5 — Inserting into PostgreSQL")
+    log.info("\nPHASE 5 — Inserting into PostgreSQL")
     engine  = create_engine(DATABASE_URL, pool_pre_ping=True)
     Session = sessionmaker(bind=engine)
     session = Session()
@@ -671,14 +678,14 @@ def main():
         elapsed = time.time() - t0
 
         print(f"\n{'=' * 68}")
-        print(f"  COMPLETE")
+        print("  COMPLETE")
         print(f"  Rows inserted into DB   : {inserted:,}")
         print(f"  CSV rows (total)        : {len(combined_df):,}")
         print(f"  Time taken              : {elapsed:.1f}s ({elapsed/60:.1f} min)")
         print(f"  OpenAQ (measured) cities: {len(oaq_cities)}")
         print(f"  CAMS fallback cities    : {len(cams_cities)}")
-        print(f"\n  Run the model retraining to update forecasts:")
-        print(f"  docker exec breathesafe_backend python /app/train_models.py --skip-prophet")
+        print("\n  Run the model retraining to update forecasts:")
+        print("  docker exec breathesafe_backend python /app/train_models.py --skip-prophet")
         print("=" * 68)
 
 

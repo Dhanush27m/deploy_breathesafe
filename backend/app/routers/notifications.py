@@ -11,7 +11,7 @@ Endpoints:
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import desc
@@ -139,6 +139,7 @@ async def create_test_notification(
     Returns the notification plus email_sent flag so the frontend can show feedback.
     """
     from sqlalchemy import func
+
     from app.services.notifier import _send_email
 
     city_obj = None

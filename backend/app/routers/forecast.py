@@ -13,13 +13,13 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from sqlalchemy import desc, func
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models.city import City
 from app.models.aqi_data import AQIData
+from app.models.city import City
 from app.models.monitoring_station import MonitoringStation
 from app.models.prediction import Prediction
 from app.models.user import User
@@ -80,7 +80,7 @@ def _get_recent_df(city_name: str, db: Session, lookback_days: int = 14):
 @router.get("/cities", response_model=List[dict])
 def forecast_cities():
     """List all cities that have trained models available."""
-    from app.ml.predictor import trained_cities, _load_metadata
+    from app.ml.predictor import _load_metadata, trained_cities
 
     cities  = trained_cities()
     meta    = _load_metadata()
@@ -175,7 +175,7 @@ def predict_city(
 
 def _statistical_baseline(recent_df, horizon: int, city_name: str) -> List[dict]:
     """Fallback: use 7-day rolling stats when no trained model is available."""
-    import numpy as np
+
     from app.ml.predictor import aqi_category
 
     series = recent_df["india_aqi"]

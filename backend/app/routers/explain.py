@@ -9,16 +9,15 @@ Endpoints:
 """
 
 from datetime import datetime, timedelta
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, desc
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models.city import City
 from app.models.aqi_data import AQIData
+from app.models.city import City
 from app.models.monitoring_station import MonitoringStation
 from app.models.risk_log import RiskLog
 from app.models.user import User
@@ -93,7 +92,6 @@ def explain_forecast(city_name: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Insufficient data for SHAP analysis.")
 
     import pandas as pd
-    import numpy as np
 
     df = pd.DataFrame([{
         "datetime":       r.datetime,
@@ -336,7 +334,9 @@ def aqi_trends(
     # ── Worst time of day ─────────────────────────────────────────────────────
     # Derive time_of_day from hour if the column is null (pipeline lag)
     df["time_of_day"] = df["time_of_day"].fillna(
-        df["hour"].map(lambda h: "night" if h < 6 else ("morning" if h < 12 else ("afternoon" if h < 18 else "evening")))
+        df["hour"].map(
+            lambda h: "night" if h < 6 else ("morning" if h < 12 else ("afternoon" if h < 18 else "evening"))
+        )
     )
     tod_avg = df.groupby("time_of_day")["india_aqi"].mean()
     worst_tod = tod_avg.idxmax() if len(tod_avg) else "unknown"
@@ -422,7 +422,6 @@ def pollutant_breakdown(
         .all()
     )
 
-    import pandas as pd
     import numpy as np
 
     POLLUTANTS = {

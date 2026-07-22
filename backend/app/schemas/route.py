@@ -2,9 +2,11 @@
 BreatheSafe — Route Planner Pydantic Schemas
 """
 
-from pydantic import BaseModel, Field
-from typing import Optional, List
 from datetime import datetime
+from typing import List, Optional
+
+from pydantic import BaseModel, Field
+
 from app.models.route import RouteTypeEnum, TravelModeEnum
 
 

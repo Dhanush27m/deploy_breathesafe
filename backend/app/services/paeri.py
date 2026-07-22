@@ -19,18 +19,20 @@ Risk categories:
   76–100 → Severe
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional
 
-
 # ── AQI → base score (piecewise linear on India AQI scale) ────────────────────
+# Bands are contiguous (50→50, not 50→51) because india_aqi is a Float: a value
+# like 50.5 would otherwise match no band and fall through to the 1.0 default,
+# scoring a mildly polluted day as maximum risk.
 _AQI_BREAKPOINTS = [
     (0,   50,  0.00, 0.20),   # Good
-    (51,  100, 0.20, 0.40),   # Satisfactory
-    (101, 200, 0.40, 0.60),   # Moderately Polluted
-    (201, 300, 0.60, 0.75),   # Poor
-    (301, 400, 0.75, 0.90),   # Very Poor
-    (401, 500, 0.90, 1.00),   # Severe
+    (50,  100, 0.20, 0.40),   # Satisfactory
+    (100, 200, 0.40, 0.60),   # Moderately Polluted
+    (200, 300, 0.60, 0.75),   # Poor
+    (300, 400, 0.75, 0.90),   # Very Poor
+    (400, 500, 0.90, 1.00),   # Severe
 ]
 
 

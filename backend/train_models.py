@@ -268,7 +268,8 @@ def train_prophet(df: pd.DataFrame, city: str, models_dir: str = MODELS_DIR) -> 
 
 # ── Load from DB ───────────────────────────────────────────────────────────────
 def load_from_db(db_url: str) -> pd.DataFrame:
-    from sqlalchemy import create_engine, text as sa_text
+    from sqlalchemy import create_engine
+    from sqlalchemy import text as sa_text
 
     print("  Connecting to database...")
     engine = create_engine(db_url, pool_pre_ping=True)
@@ -345,7 +346,7 @@ def main():
         if not db_url:
             print("❌  --from-db requires DATABASE_URL env var or --db-url flag")
             sys.exit(1)
-        print(f"  Source: DATABASE")
+        print("  Source: DATABASE")
         df = load_from_db(db_url)
         print(f"  📊 {len(df):,} rows | {df['city'].nunique()} cities | "
               f"{df['datetime'].min().date()} → {df['datetime'].max().date()}")
@@ -377,7 +378,7 @@ def main():
     # ── Skip if already trained (idempotent for Docker restarts) ──────────────
     if args.from_db and models_already_trained(cities):
         print(f"\n  ✅  v2 models exist for all {len(cities)} cities — skipping.")
-        print(f"     Delete ml/models/*.joblib to force retraining.")
+        print("     Delete ml/models/*.joblib to force retraining.")
         sys.exit(0)
 
     metadata = {

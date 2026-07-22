@@ -5,11 +5,13 @@ Each station is a physical or virtual AQI monitoring point.
   - OpenAQ      → real stations with OpenAQ location_id
 """
 
-from sqlalchemy import (Column, Integer, String, Float, Boolean,
-                         DateTime, ForeignKey, Enum as SAEnum)
+import enum
+
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-import enum
+
 from app.database import Base
 
 

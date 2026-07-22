@@ -2,10 +2,12 @@
 BreatheSafe — Health Profile Pydantic Schemas
 """
 
-from pydantic import BaseModel, Field
-from typing import Optional
 from datetime import datetime
-from app.models.health_profile import GenderEnum, SensitivityEnum, ActivityLevelEnum
+from typing import Optional
+
+from pydantic import BaseModel, Field
+
+from app.models.health_profile import ActivityLevelEnum, GenderEnum, SensitivityEnum
 
 
 class HealthProfileCreate(BaseModel):

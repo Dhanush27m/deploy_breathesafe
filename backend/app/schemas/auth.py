@@ -3,9 +3,9 @@ BreatheSafe — Auth Pydantic Schemas
 Request/response models for registration, login, and JWT tokens.
 """
 
-from pydantic import BaseModel, EmailStr, field_validator
-from typing import Optional
 from datetime import datetime
+
+from pydantic import BaseModel, EmailStr, field_validator
 
 
 # ── Register ──────────────────────────────────────────────────────────────────
@@ -26,6 +26,10 @@ class UserRegister(BaseModel):
     def password_strength(cls, v):
         if len(v) < 6:
             raise ValueError("Password must be at least 6 characters")
+        # bcrypt hard-rejects anything over 72 bytes — without this the request
+        # would surface as an unhandled 500 instead of a validation error.
+        if len(v.encode("utf-8")) > 72:
+            raise ValueError("Password must be at most 72 bytes")
         return v
 
 

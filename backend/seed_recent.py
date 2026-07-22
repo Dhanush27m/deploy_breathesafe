@@ -93,7 +93,7 @@ def load_recent_csv(csv_path: str, days: int) -> pd.DataFrame:
     for col in bool_cols:
         if col in df.columns:
             df[col] = df[col].map(
-                {True: True, False: False, "True": True, "False": False, 1: True, 0: False}
+                {True: True, False: False, "True": True, "False": False}
             ).fillna(False).astype(bool)
 
     # Keep only the last `days` days per city
@@ -183,7 +183,7 @@ def main():
     csv_path = args.csv     or CSV_PATH
 
     print(f"\n{'='*60}")
-    print(f"  BreatheSafe — Seed Recent AQI Data")
+    print("  BreatheSafe — Seed Recent AQI Data")
     print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"{'='*60}")
     print(f"  CSV:     {csv_path}")
@@ -226,7 +226,7 @@ def main():
 
     # ── Insert ─────────────────────────────────────────────────────────────────
     t0 = time.time()
-    print(f"\n  Inserting into aqi_data...")
+    print("\n  Inserting into aqi_data...")
     n = insert_rows(engine, df, station_map)
     elapsed = time.time() - t0
 

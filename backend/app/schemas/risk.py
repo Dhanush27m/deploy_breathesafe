@@ -2,11 +2,13 @@
 BreatheSafe — Risk Assessment Pydantic Schemas
 """
 
-from pydantic import BaseModel, Field
-from typing import Optional, Dict, List
 from datetime import datetime
-from app.models.risk_log import RiskCategoryEnum
+from typing import List, Optional
+
+from pydantic import BaseModel, Field
+
 from app.models.health_profile import ActivityLevelEnum
+from app.models.risk_log import RiskCategoryEnum
 
 
 class RiskCalculateRequest(BaseModel):

@@ -3,15 +3,14 @@ BreatheSafe — FastAPI Application Entry Point
 Multi-agent AQI forecasting, personalized health risk, and route optimization.
 """
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from app.config import settings
-from app.database import engine, Base
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 # Import all models so SQLAlchemy registers them before create_all
 import app.models  # noqa: F401
+from app.config import settings
 
 
 # ── Startup / Shutdown ────────────────────────────────────────────────────────
@@ -19,8 +18,10 @@ import app.models  # noqa: F401
 async def lifespan(app: FastAPI):
     """Run startup tasks before serving requests, cleanup on shutdown."""
     import threading
-    from app.database import SessionLocal
+
     from sqlalchemy import text
+
+    from app.database import SessionLocal
 
     # Start background scheduler
     from app.scheduler import start_scheduler
@@ -101,31 +102,38 @@ app.add_middleware(
 # ── Routers (registered as phases are built) ──────────────────────────────────
 # Phase 2
 from app.routers import auth, profile
+
 app.include_router(auth.router,    prefix="/auth",    tags=["Authentication"])
 app.include_router(profile.router, prefix="/profile", tags=["Health Profile"])
 
 # Phase 3
 from app.routers import aqi
+
 app.include_router(aqi.router, prefix="/aqi", tags=["AQI Monitoring"])
 
 # Phase 4
 from app.routers import forecast
+
 app.include_router(forecast.router, prefix="/forecast", tags=["AQI Forecasting"])
 
 # Phase 5
 from app.routers import risk
+
 app.include_router(risk.router, prefix="/risk", tags=["Risk Assessment"])
 
 # Phase 6
 from app.routers import route
+
 app.include_router(route.router, prefix="/route", tags=["Route Planning"])
 
 # Phase 7
 from app.routers import explain
+
 app.include_router(explain.router, prefix="/explain", tags=["Explainability"])
 
 # Phase 8
 from app.routers import notifications
+
 app.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
 
 

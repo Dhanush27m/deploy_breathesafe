@@ -35,23 +35,26 @@ def check_alerts_job():
       2. If AQI > preferred_aqi_threshold and not notified in last 6 h → create notification.
       3. If a saved forecast predicts high AQI in next 24 h → create forecast alert.
     """
+    from sqlalchemy import desc, func
+
     from app.database import SessionLocal
-    from sqlalchemy import func, desc
 
     db = SessionLocal()
     try:
-        from app.models.user import User
-        from app.models.health_profile import HealthProfile
-        from app.models.city import City
-        from app.models.aqi_data import AQIData
-        from app.models.monitoring_station import MonitoringStation
-        from app.models.prediction import Prediction
-        from app.models.notification import NotificationTypeEnum
-        from app.services.notifier import (
-            create_notification, already_notified_recently,
-            build_aqi_alert_message, build_forecast_alert_message,
-        )
         from app.ml.predictor import aqi_category
+        from app.models.aqi_data import AQIData
+        from app.models.city import City
+        from app.models.health_profile import HealthProfile
+        from app.models.monitoring_station import MonitoringStation
+        from app.models.notification import NotificationTypeEnum
+        from app.models.prediction import Prediction
+        from app.models.user import User
+        from app.services.notifier import (
+            already_notified_recently,
+            build_aqi_alert_message,
+            build_forecast_alert_message,
+            create_notification,
+        )
 
         users = (
             db.query(User)
@@ -221,19 +224,19 @@ def _check_and_notify_route(db, route, now: datetime) -> bool:
     Evaluate one saved route and send a monitoring email if conditions warrant it.
     Returns True if an email was dispatched.
     """
-    from sqlalchemy import desc, func
-    from app.models.user import User
-    from app.models.health_profile import HealthProfile
-    from app.models.city import City
-    from app.models.monitoring_station import MonitoringStation
+    from sqlalchemy import desc
+
+    from app.ml.predictor import aqi_category
     from app.models.aqi_data import AQIData
+    from app.models.monitoring_station import MonitoringStation
     from app.models.notification import Notification, NotificationTypeEnum
-    from app.services.paeri import calculate_paeri
+    from app.models.user import User
     from app.services.notifier import (
-        route_notified_recently, create_route_notification,
+        create_route_notification,
+        route_notified_recently,
         send_route_aqi_update_email,
     )
-    from app.ml.predictor import aqi_category
+    from app.services.paeri import calculate_paeri
 
     hours_until = (route.planned_start - now).total_seconds() / 3600
 
@@ -405,6 +408,7 @@ def _check_and_notify_route(db, route, now: datetime) -> bool:
 def _nearest_city_for_coords(db, lat: float, lon: float):
     """Return the nearest City object to the given coordinates."""
     import math
+
     from app.models.city import City
 
     cities = db.query(City).filter(
@@ -450,8 +454,9 @@ def cleanup_old_data_job():
     Runs nightly at 03:00 IST.
     Deletes aqi_data rows older than 90 days so the table stays small.
     """
-    from app.database import SessionLocal
     from sqlalchemy import text
+
+    from app.database import SessionLocal
 
     logger.info("Data retention cleanup starting (purge > 90 days)...")
     db = SessionLocal()

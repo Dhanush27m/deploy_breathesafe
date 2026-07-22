@@ -3,11 +3,12 @@ BreatheSafe — Notification Model
 Stores in-app and email alerts sent to users.
 """
 
-from sqlalchemy import (Column, Integer, String, Float, Boolean,
-                         DateTime, ForeignKey, Enum as SAEnum)
+import enum
+
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-import enum
+
 from app.database import Base
 
 

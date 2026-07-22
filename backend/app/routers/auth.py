@@ -6,20 +6,20 @@ Endpoints: register, login, refresh, /me, /debug-email
 import logging
 import threading
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.database import get_db
-from app.models.user import User
-from app.schemas.auth import UserRegister, UserLogin, Token, UserOut, RefreshRequest
 from app.core.security import (
-    hash_password,
-    verify_password,
     create_access_token,
     create_refresh_token,
     decode_token,
+    hash_password,
+    verify_password,
 )
+from app.database import get_db
 from app.dependencies import get_current_user
+from app.models.user import User
+from app.schemas.auth import RefreshRequest, Token, UserLogin, UserOut, UserRegister
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -130,23 +130,23 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 # ── Debug Email ───────────────────────────────────────────────────────────────
 @router.get("/debug-email")
-def debug_email(to: str = Query(..., description="Email address to send the test to")):
+def debug_email(current_user: User = Depends(get_current_user)):
     """
     Diagnostic endpoint — tests SMTP end-to-end and returns the full result.
 
-    Hit this from your browser or curl to instantly see what's happening:
-      GET /auth/debug-email?to=user@example.com
+    Requires authentication and always sends to the *caller's own* registered
+    address. It previously accepted an arbitrary `?to=` address with no auth,
+    which let anyone use the configured Gmail account to mail strangers and
+    exposed the sending address to unauthenticated callers.
 
     Returns:
       - credential_status: what SMTP creds were resolved (no password value)
       - smtp_test: whether the actual SMTP connection and send succeeded
       - error: exact error message if it failed (SMTPAuthenticationError, etc.)
-
-    No authentication required — use only for debugging, then leave as-is
-    (the endpoint only sends to the address YOU specify in the query param).
     """
-    from app.services.notifier import get_email_debug_info, _send_email_sync
+    from app.services.notifier import _send_email_sync, get_email_debug_info
 
+    to        = current_user.email
     cred_info = get_email_debug_info()
 
     if not cred_info["credentials_ok"]:

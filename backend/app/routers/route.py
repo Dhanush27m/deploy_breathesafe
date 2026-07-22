@@ -10,28 +10,35 @@ Endpoints:
 
 import logging
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models.city import City
 from app.models.aqi_data import AQIData
+from app.models.city import City
 from app.models.monitoring_station import MonitoringStation
 from app.models.route import Route, RouteTypeEnum, TravelModeEnum
 from app.models.user import User
 from app.schemas.route import RouteRequest, RouteSaveRequest, RouteScoreRequest
 from app.services.route_engine import (
-    fetch_osrm_routes, fetch_osrm_route_via,
-    routes_are_similar, perpendicular_via_points, via_direction_label,
-    decode_polyline, sample_aqi_along_route,
-    score_routes, exposure_reduction, build_explanation, haversine,
+    build_explanation,
+    decode_polyline,
+    exposure_reduction,
+    fetch_osrm_route_via,
+    fetch_osrm_routes,
+    haversine,
+    perpendicular_via_points,
+    routes_are_similar,
+    sample_aqi_along_route,
+    score_routes,
+    via_direction_label,
 )
 
 router = APIRouter()
@@ -506,11 +513,13 @@ def save_route(
     warning_message   = None
 
     from app.models.health_profile import HealthProfile
-    from app.services.paeri import calculate_paeri
     from app.models.notification import NotificationTypeEnum
     from app.services.notifier import (
-        create_notification, create_route_notification, send_route_saved_email,
+        create_notification,
+        create_route_notification,
+        send_route_saved_email,
     )
+    from app.services.paeri import calculate_paeri
 
     profile = (
         db.query(HealthProfile)

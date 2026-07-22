@@ -3,11 +3,13 @@ BreatheSafe — Health Profile Model
 Stores user's health data used for personalized PAERI risk scoring.
 """
 
-from sqlalchemy import (Column, Integer, String, Boolean, Float,
-                         DateTime, ForeignKey, Enum as SAEnum)
+import enum
+
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-import enum
+
 from app.database import Base
 
 

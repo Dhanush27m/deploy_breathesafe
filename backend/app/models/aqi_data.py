@@ -4,12 +4,11 @@ Hourly AQI + weather readings per monitoring station.
 Directly mirrors the enriched CSV schema (35 columns).
 """
 
-from sqlalchemy import (Column, Integer, String, Float, Boolean,
-                         DateTime, ForeignKey, Index)
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from app.database import Base
 
+from app.database import Base
 
 # Using plain String instead of PostgreSQL ENUM for season/time_of_day
 # so that any new CSV values (e.g. 'early_morning', 'night_late') never

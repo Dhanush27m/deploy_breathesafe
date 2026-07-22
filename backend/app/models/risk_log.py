@@ -3,11 +3,13 @@ BreatheSafe — Risk Log Model
 Stores every PAERI (Personalized Air Exposure Risk Index) calculation.
 """
 
-from sqlalchemy import (Column, Integer, String, Float,
-                         DateTime, ForeignKey, JSON, Enum as SAEnum)
+import enum
+
+from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-import enum
+
 from app.database import Base
 
 

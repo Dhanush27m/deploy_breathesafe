@@ -39,6 +39,7 @@ if not os.environ.get("DATABASE_URL"):
     sys.exit(1)
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 logging.basicConfig(
@@ -51,8 +52,9 @@ log = logging.getLogger(__name__)
 
 def show_status():
     """Print current DB and CSV status."""
-    from sqlalchemy import create_engine, text
     from pathlib import Path
+
+    from sqlalchemy import create_engine, text
 
     db_url  = os.environ["DATABASE_URL"]
     csv_path = Path(os.environ["SEED_CSV_PATH"])

@@ -17,15 +17,15 @@ Or locally (with DATABASE_URL pointing to running PostgreSQL):
 Runtime: ~3–6 minutes for 842K rows (bulk insert, 5000 rows/batch)
 """
 
+import math
 import os
 import sys
 import time
-import math
+
 import pandas as pd
-import numpy as np
+from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -294,7 +294,7 @@ def run_seed():
         print()   # newline after progress
         elapsed = time.time() - t_start
         print(f"\n{'='*60}")
-        print(f"  ✅ Seed complete!")
+        print("  ✅ Seed complete!")
         print(f"  Rows inserted : {inserted:,}")
         print(f"  Time taken    : {elapsed:.1f}s  ({elapsed/60:.1f} min)")
         print(f"  Avg speed     : {inserted/elapsed:,.0f} rows/sec")

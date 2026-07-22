@@ -4,8 +4,8 @@ Reads settings from environment variables and .env files.
 Uses pydantic-settings v2 SettingsConfigDict (replaces old class Config style).
 """
 
-import os
 import json
+import os
 from pathlib import Path
 from typing import List
 
@@ -101,6 +101,22 @@ class Settings(BaseSettings):
                     pass
             # Comma-separated or single value
             return [o.strip() for o in v.split(",") if o.strip()]
+        return v
+
+    # ── Fail fast on a missing signing key ───────────────────────────────────
+    # There is no .env file on Render, so an unset SECRET_KEY would silently
+    # fall back to "" and every JWT would be signed with an empty key — making
+    # tokens forgeable for any user id. Refusing to boot is far safer than
+    # serving traffic with broken auth.
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def _secret_key_required(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError(
+                "SECRET_KEY is not set. Generate one with "
+                "`python -c \"import secrets; print(secrets.token_urlsafe(48))\"` "
+                "and set it as an environment variable."
+            )
         return v
 
     # ── Hard fallback: read SMTP vars directly from OS env if still blank ────

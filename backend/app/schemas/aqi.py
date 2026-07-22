@@ -2,9 +2,10 @@
 BreatheSafe — AQI Pydantic Schemas
 """
 
-from pydantic import BaseModel
-from typing import Optional, List
 from datetime import datetime
+from typing import List, Optional
+
+from pydantic import BaseModel
 
 
 class CityOut(BaseModel):

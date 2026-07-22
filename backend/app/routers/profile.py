@@ -7,10 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.user import User
-from app.models.health_profile import HealthProfile
-from app.schemas.profile import HealthProfileCreate, HealthProfileUpdate, HealthProfileOut
 from app.dependencies import get_current_user
+from app.models.health_profile import HealthProfile
+from app.models.user import User
+from app.schemas.profile import HealthProfileCreate, HealthProfileOut, HealthProfileUpdate
 
 router = APIRouter()
 

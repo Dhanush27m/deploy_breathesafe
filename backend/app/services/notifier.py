@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
-from typing import Optional, List
+from typing import List, Optional
 
 from sqlalchemy.orm import Session
 

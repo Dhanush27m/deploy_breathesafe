@@ -279,7 +279,9 @@ def score_routes(routes_with_aqi: List[dict]) -> dict:
 
     fastest_route  = min(routes_with_aqi, key=lambda r: r["duration_s"])
     clean_route    = min(routes_with_aqi, key=lambda r: r["avg_aqi"])
-    balanced_score = lambda r: 0.4 * norm_t(r["duration_s"]) + 0.6 * norm_a(r["avg_aqi"])
+    def balanced_score(r):
+        return 0.4 * norm_t(r["duration_s"]) + 0.6 * norm_a(r["avg_aqi"])
+
     balanced_route = min(routes_with_aqi, key=balanced_score)
 
     return {

@@ -11,16 +11,16 @@ Endpoints:
 """
 
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, desc, asc
+from sqlalchemy import asc, desc, func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.aqi_data import AQIData
-from app.models.monitoring_station import MonitoringStation
 from app.models.city import City
+from app.models.monitoring_station import MonitoringStation
 
 router = APIRouter()
 
@@ -109,7 +109,7 @@ def latest_all_cities(db: Session = Depends(get_db)):
 # ── 3. Rankings (worst → best AQI) ───────────────────────────────────────────
 @router.get("/rankings", response_model=List[dict])
 def aqi_rankings(
-    order: str = Query("desc", regex="^(asc|desc)$"),
+    order: str = Query("desc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
 ):
     """

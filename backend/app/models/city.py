@@ -3,8 +3,9 @@ BreatheSafe — City Model
 Master list of supported Indian cities.
 """
 
-from sqlalchemy import Column, Integer, String, Float, Boolean
+from sqlalchemy import Boolean, Column, Float, Integer, String
 from sqlalchemy.orm import relationship
+
 from app.database import Base
 
 
